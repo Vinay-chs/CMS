@@ -15,5 +15,5 @@ const EmptyModule: React.FC<PageProps> = ({ moduleName = "This module" }) => (
     </Paper>
   </Box>
 );
-<h1>pothuraju akula</h1>
+
 export default EmptyModule;
