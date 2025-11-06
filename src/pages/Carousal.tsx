@@ -1781,5 +1781,3 @@ export default function Carousal({ setSelectedModule }: PageProps) {
     </Box>
   );
 }
-
-// THis is a new line for testing......
