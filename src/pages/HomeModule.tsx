@@ -1,160 +1,196 @@
 // src/pages/HomeModule.tsx
 import React from "react";
-import { Box, Typography, Paper, Grid, Card, CardContent, Button } from "@mui/material";
+import {
+  Box,
+  Grid,
+  Card,
+  CardContent,
+  Typography,
+  Button,
+  Divider,
+  IconButton,
+} from "@mui/material";
 import HomeIcon from "@mui/icons-material/Home";
+import ViewCarouselIcon from "@mui/icons-material/ViewCarousel";
+import MenuBookIcon from "@mui/icons-material/MenuBook";
+import CallIcon from "@mui/icons-material/Call";
+import PeopleIcon from "@mui/icons-material/People";
+import InfoIcon from "@mui/icons-material/Info";
+import FooterIcon from "@mui/icons-material/ArrowDropDown";
 import { PageProps } from "../types/routes";
 
-const HomeModule: React.FC<PageProps> = ({ setSelectedModule }) => (
-  <Box sx={{ p: { xs: 2, md: 4 }, minHeight: "100vh", backgroundColor: "#f5f7f8" }}>
-    <Paper elevation={2} sx={{ p: { xs: 3, md: 4 }, borderRadius: 2, maxWidth: 1200, mx: "auto" }}>
-      <Box sx={{ display: "flex", gap: 2, alignItems: "center", mb: 3 }}>
-        <HomeIcon sx={{ fontSize: 44, color: "#2c3e50" }} />
+const BigCard: React.FC<{
+  title: string;
+  subtitle?: string;
+  icon?: React.ReactNode;
+  onClick?: () => void;
+  buttonLabel?: string;
+}> = ({ title, subtitle, icon, onClick, buttonLabel = "Open" }) => (
+  <Card sx={{ borderRadius: 2, boxShadow: 3, height: "100%" }}>
+    <CardContent sx={{ p: { xs: 3, md: 4 } }}>
+      <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
+        <Box sx={{ fontSize: 36 }}>{icon}</Box>
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 800, color: "#2c3e50" }}>
+          <Typography variant="h5" sx={{ fontWeight: 700 }}>
+            {title}
+          </Typography>
+          {subtitle && (
+            <Typography variant="body2" sx={{ color: "text.secondary", mt: 1 }}>
+              {subtitle}
+            </Typography>
+          )}
+        </Box>
+      </Box>
+
+      <Box sx={{ mt: 3 }}>
+        <Button
+          variant="contained"
+          onClick={onClick}
+          disabled={!onClick}
+          sx={{
+            px: 4,
+            py: 1.5,
+            borderRadius: 2,
+            textTransform: "none",
+            boxShadow: 2,
+          }}
+        >
+          {buttonLabel}
+        </Button>
+      </Box>
+    </CardContent>
+  </Card>
+);
+
+const SmallCard: React.FC<{
+  title: string;
+  subtitle?: string;
+  icon?: React.ReactNode;
+  comingSoon?: boolean;
+  onClick?: () => void;
+}> = ({ title, subtitle, icon, comingSoon = false, onClick }) => (
+  <Card sx={{ borderRadius: 2, boxShadow: 1, height: "100%" }}>
+    <CardContent sx={{ p: 3 }}>
+      <Box sx={{ display: "flex", gap: 2, alignItems: "center", mb: 1 }}>
+        <Box sx={{ fontSize: 28 }}>{icon}</Box>
+        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+          {title}
+        </Typography>
+      </Box>
+      {subtitle && (
+        <Typography variant="body2" sx={{ color: "text.secondary", mb: 2 }}>
+          {subtitle}
+        </Typography>
+      )}
+      <Button
+        variant="outlined"
+        disabled={comingSoon && !onClick}
+        onClick={onClick}
+        sx={{ textTransform: "none", borderRadius: 2 }}
+      >
+        {comingSoon ? "COMING SOON" : "Open"}
+      </Button>
+    </CardContent>
+  </Card>
+);
+
+const HomeModule: React.FC<PageProps> = ({ setSelectedModule }) => {
+  return (
+    <Box sx={{ p: { xs: 2, md: 4 } }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
+        <IconButton size="large" sx={{ bgcolor: "transparent" }}>
+          <HomeIcon sx={{ fontSize: 34 }} />
+        </IconButton>
+        <Box>
+          <Typography variant="h3" sx={{ fontWeight: 800 }}>
             Welcome to CMS Dashboard
           </Typography>
-          <Typography variant="body1" sx={{ color: "#61717a", mt: 1 }}>
+          <Typography variant="body1" sx={{ color: "text.secondary" }}>
             Build and customize your website components
           </Typography>
         </Box>
       </Box>
 
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        {/* NavBuilder Card - ACTIVE */}
+      <Divider sx={{ mb: 3 }} />
+
+      <Grid container spacing={3}>
+        {/* Top row: two large cards */}
         <Grid  >
-          <Card
-            sx={{
-              height: "100%",
-              cursor: "pointer",
-              transition: "all 0.3s",
-              "&:hover": { transform: "translateY(-4px)", boxShadow: 4 },
-            }}
-            onClick={() => setSelectedModule && setSelectedModule("navbar")}
-          >
-            <CardContent sx={{ textAlign: "center", p: 3 }}>
-              <Typography variant="h5" sx={{ mb: 2, color: "#2c3e50" }}>
-                📊 NavBuilder
-              </Typography>
-              <Typography variant="body2" sx={{ color: "#61717a" }}>
-                Create and customize your website navigation bar with components
-              </Typography>
-            </CardContent>
-          </Card>
+          <BigCard
+            title="NavBuilder"
+            subtitle="Create and customize your website navigation bar with components"
+            icon={<MenuBookIcon sx={{ color: "#6b7280" }} />}
+            onClick={() => setSelectedModule && setSelectedModule("NavbarBuilderPage")}
+            buttonLabel="Edit Navbar"
+          />
         </Grid>
 
-        {/* Carousels Card - NOW ACTIVE */}
-        <Grid  >
-          <Card
-            sx={{
-              height: "100%",
-              cursor: "pointer",
-              transition: "all 0.3s",
-              "&:hover": { transform: "translateY(-4px)", boxShadow: 4 },
-            }}
-            onClick={() => setSelectedModule && setSelectedModule("carousel")}
-          >
-            <CardContent sx={{ textAlign: "center", p: 3 }}>
-              <Typography variant="h5" sx={{ mb: 2, color: "#2c3e50" }}>
-                🎠 Carousels
-              </Typography>
-              <Typography variant="body2" sx={{ color: "#61717a", mb: 2 }}>
-                Design beautiful image and content sliders
-              </Typography>
-            
-            </CardContent>
-          </Card>
+        <Grid >
+          <BigCard
+            title="Carousels"
+            subtitle="Design beautiful image and content sliders"
+            icon={<ViewCarouselIcon sx={{ color: "#8b5cf6" }} />}
+            onClick={() => setSelectedModule && setSelectedModule("CarouselModule")}
+            buttonLabel="Edit Carousel"
+          />
         </Grid>
 
-        {/* Contact Info Card - Coming Soon */}
+        {/* Second row: three small cards */}
         <Grid  >
-          <Card sx={{ height: "100%", transition: "all 0.3s", opacity: 0.7 }}>
-            <CardContent sx={{ textAlign: "center", p: 3 }}>
-              <Typography variant="h5" sx={{ mb: 2, color: "#2c3e50" }}>
-                📞 Contact Info
-              </Typography>
-              <Typography variant="body2" sx={{ color: "#61717a", mb: 2 }}>
-                Manage business contact information
-              </Typography>
-              <Button variant="outlined" disabled sx={{ mt: 1 }}>
-                Coming Soon
-              </Button>
-            </CardContent>
-          </Card>
+          <SmallCard
+            title="Contact Info"
+            subtitle="Manage business contact information"
+            icon={<CallIcon sx={{ color: "#ec4899" }} />}
+            comingSoon={true}
+          />
         </Grid>
 
-        {/* Testimonials (kept as Coming Soon) */}
         <Grid  >
-          <Card sx={{ height: "100%", transition: "all 0.3s", opacity: 0.7 }}>
-            <CardContent sx={{ textAlign: "center", p: 3 }}>
-              <Typography variant="h5" sx={{ mb: 2, color: "#2c3e50" }}>
-                💬 Testimonials
-              </Typography>
-              <Typography variant="body2" sx={{ color: "#61717a", mb: 2 }}>
-                Manage customer testimonials and reviews
-              </Typography>
-              <Button variant="outlined" disabled sx={{ mt: 1 }}>
-                Coming Soon
-              </Button>
-            </CardContent>
-          </Card>
+          <SmallCard
+            title="Testimonials"
+            subtitle="Manage customer testimonials and reviews"
+            icon={<PeopleIcon sx={{ color: "#7c3aed" }} />}
+            comingSoon={true}
+          />
         </Grid>
 
-        {/* About Us */}
         <Grid  >
-          <Card sx={{ height: "100%", transition: "all 0.3s", opacity: 0.7 }}>
-            <CardContent sx={{ textAlign: "center", p: 3 }}>
-              <Typography variant="h5" sx={{ mb: 2, color: "#2c3e50" }}>
-                👥 About Us
-              </Typography>
-              <Typography variant="body2" sx={{ color: "#61717a", mb: 2 }}>
-                Create and manage about us section
-              </Typography>
-              <Button variant="outlined" disabled sx={{ mt: 1 }}>
-                Coming Soon
-              </Button>
-            </CardContent>
-          </Card>
+          <SmallCard
+            title="About Us"
+            subtitle="Create and manage about us section"
+            icon={<InfoIcon sx={{ color: "#6b7280" }} />}
+            comingSoon={true}
+          />
         </Grid>
 
-        {/* Footer */}
-        <Grid  >
-          <Card sx={{ height: "100%", transition: "all 0.3s", opacity: 0.7 }}>
-            <CardContent sx={{ textAlign: "center", p: 3 }}>
-              <Typography variant="h5" sx={{ mb: 2, color: "#2c3e50" }}>
-                🔻 Footer
+        {/* Footer section card */}
+        <Grid>
+          <Card sx={{ borderRadius: 2, boxShadow: 2 }}>
+            <CardContent sx={{ p: 3 }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                <FooterIcon sx={{ fontSize: 32 }} />
+                <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                  Footer
+                </Typography>
+              </Box>
+              <Typography variant="body2" sx={{ color: "text.secondary", mt: 1, mb: 2 }}>
+                Customize the footer section shown across all pages
               </Typography>
-              <Typography variant="body2" sx={{ color: "#61717a", mb: 2 }}>
-                Customize website footer section
-              </Typography>
-              <Button variant="outlined" disabled sx={{ mt: 1 }}>
-                Coming Soon
-              </Button>
+              <Box>
+                <Button
+                  variant="contained"
+                  onClick={() => setSelectedModule && setSelectedModule("FooterModule")}
+                  sx={{ textTransform: "none", borderRadius: 2 }}
+                >
+                  Edit Footer
+                </Button>
+              </Box>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
-
-      <Box sx={{ textAlign: "center", mt: 4 }}>
-        <Typography variant="body1" sx={{ color: "#61717a", mb: 3 }}>
-          Click on NavBuilder to start creating your website navigation.
-        </Typography>
-
-        <Button
-          variant="contained"
-          onClick={() => setSelectedModule && setSelectedModule("navbar")}
-          sx={{
-            textTransform: "none",
-            borderRadius: 2,
-            px: 4,
-            py: 1.5,
-            fontSize: "1.1rem",
-          }}
-        >
-          Start with NavBuilder
-        </Button>
-      </Box>
-    </Paper>
-  </Box>
-);
+    </Box>
+  );
+};
 
 export default HomeModule;
