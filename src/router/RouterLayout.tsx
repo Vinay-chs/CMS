@@ -1,36 +1,36 @@
 // src/router/RouterLayout.tsx
 import React from "react";
 import { Box } from "@mui/material";
-import { RouterLayoutProps, ComponentKey, PageProps } from "../types/routes";
+import { RouterLayoutProps, ComponentKey, PageProps, ComponentMap } from "../types/routes";
 import { routeMap } from "./routes";
 import HomeModule from "../pages/HomeModule";
 import NavbarBuilderPage from "../pages/NavBuilder";
 import EmptyModule from "../pages/EmptyModule";
 import YourLayoutModule from "../pages/YourLayout";
 import Carousal from "../pages/Carousal"; // wrapper page (accepts PageProps)
+import FooterEditor from "../pages/FooterEditor"; // ensure this exists
 import Sidebar from "../components/Sidebar";
+import TestimonialsBuilderMUI from "../pages/Testimonials";
+import Newsletter from "../pages/Newsletter";
+import TeamSection from "../pages/TeamSection"; // <- Team module import
+import OnboardingWizard from "../pages/OnboardingWizard";
 
 /**
- * IMPORTANT:
- * Previously we typed the componentMap as { [K in ComponentKey]: React.FC<PageProps> }
- * which failed when some components expected other props (e.g. Carousel expects `slides`).
- *
- * Change: use React.ComponentType<any> for flexibility so components with custom props
- * (like Carousel) can still be mapped here without TypeScript errors.
- *
- * This keeps runtime behavior identical but avoids the TS mismatch.
+ * Component map typed from ./types/routes (ComponentMap).
+ * Each key from ComponentKey must have a corresponding entry here.
+ * React.ComponentType<any> is used so components with custom props don't cause TS errors.
  */
-
-type ComponentMap = {
-  [K in ComponentKey]: React.ComponentType<any>;
-};
-
 const componentMap: ComponentMap = {
   HomeModule,
   NavbarBuilderPage,
-  CarouselModule: Carousal, // Carousal is a wrapper page that renders the Carousel internally
+  CarouselModule: Carousal,
   EmptyModule,
   YourLayoutModule,
+  FooterModule: FooterEditor,
+  TestimonialsModule: TestimonialsBuilderMUI,
+  NewsletterModule: Newsletter,
+  TeamModule: TeamSection,
+  OnboardingWizard, // <-- ADD THIS
 };
 
 const RouterLayout: React.FC<
@@ -45,7 +45,34 @@ const RouterLayout: React.FC<
   savedNavbarConfig,
   showNavbarInSidebar,
 }) => {
-  const activeRoute = routeMap.find((r) => r.key === selectedModule) || routeMap[0];
+  // tolerant matching: normalize selectedModule and try several fallbacks
+  const normalizedSelected = (selectedModule || "").toString().trim().toLowerCase();
+
+  let activeRoute = routeMap.find((r) => {
+    if (!r?.key) return false;
+    return r.key.toString().trim().toLowerCase() === normalizedSelected;
+  });
+
+  // If not found, try matching against route.component (component key)
+  if (!activeRoute) {
+    activeRoute = routeMap.find((r) => {
+      const componentName = (r.component || "").toString().trim().toLowerCase();
+      return componentName === normalizedSelected;
+    });
+  }
+
+  // If still not found, try matching by label (friendly name)
+  if (!activeRoute) {
+    activeRoute = routeMap.find((r) => (r.label || "").toString().trim().toLowerCase() === normalizedSelected);
+  }
+
+  // final fallback to first route and warn in console (dev only)
+  if (!activeRoute) {
+    // eslint-disable-next-line no-console
+    console.warn(`[RouterLayout] selectedModule "${selectedModule}" did not match any route keys; falling back to first route.`);
+    activeRoute = routeMap[0];
+  }
+
   const componentKey = (activeRoute.component || "HomeModule") as ComponentKey;
   const ComponentToRender = componentMap[componentKey];
 

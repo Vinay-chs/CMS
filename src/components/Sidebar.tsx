@@ -1,99 +1,125 @@
-//src/components/Sidebar.tsx
+// src/components/Sidebar.tsx
 import React from "react";
 import {
+  Box,
   List,
   ListItem,
   ListItemButton,
   ListItemIcon,
   ListItemText,
   Divider,
-  Box,
-  Typography
+  Typography,
+  Tooltip,
 } from "@mui/material";
-import { SidebarProps } from "../types/routes";
 import HomeIcon from "@mui/icons-material/Home";
-import ViewQuilt from "@mui/icons-material/ViewQuilt";
+import ViewQuiltIcon from "@mui/icons-material/ViewQuilt";
 import MenuIcon from "@mui/icons-material/Menu";
 
-const Sidebar: React.FC<SidebarProps> = ({ selectedModule, setSelectedModule, showNavbarInSidebar = false }) => {
+export type SidebarProps = {
+  selectedModule?: string;
+  setSelectedModule?: (m: string) => void;
+  showNavbarInSidebar?: boolean;
+  open?: boolean;
+  topbarHeight?: number; // optional: so we can position below topbar
+};
+
+const SIDEBAR_WIDTH = 260;
+const COLLAPSED_WIDTH = 72;
+
+const Sidebar: React.FC<SidebarProps> = ({
+  selectedModule = "home",
+  setSelectedModule = () => {},
+  showNavbarInSidebar = false,
+  open = true,
+  topbarHeight = 64,
+}) => {
+  const itemSx = (active: boolean) => ({
+    borderRadius: 1.5,
+    py: 1.1,
+    px: 1.5,
+    bgcolor: active ? "#f39c12" : "transparent",
+    color: active ? "#17202a" : "#dfe6e9",
+    "&:hover": { bgcolor: active ? "#e67e22" : "rgba(255,255,255,0.04)" },
+    display: "flex",
+    alignItems: "center",
+    gap: 1,
+  });
+
+  const iconSx = (active: boolean) => ({ color: active ? "#17202a" : "#f39c12", minWidth: 36 });
+
   return (
-    <Box sx={{ width: 260, bgcolor: "#17202a", color: "#ecf0f1", height: "100%", p: 2 }}>
-      <Typography variant="h6" sx={{ mb: 2, fontWeight: 700, color: "#f7c948" }}>
-        CMS
-      </Typography>
-
-      <List>
-        {/* Home */}
-        <ListItem disablePadding sx={{ mb: 0.5 }}>
-          <ListItemButton
-            onClick={() => setSelectedModule("home")}
-            sx={{
-              borderRadius: 1.5,
-              py: 1.1,
-              px: 1.5,
-              bgcolor: selectedModule === "home" ? "#f39c12" : "transparent",
-              color: selectedModule === "home" ? "#17202a" : "#dfe6e9",
-              textTransform: "none",
-              "&:hover": { bgcolor: selectedModule === "home" ? "#e67e22" : "rgba(255,255,255,0.06)" },
-            }}
-          >
-            <ListItemIcon sx={{ color: selectedModule === "home" ? "#17202a" : "#f39c12", minWidth: 36 }}>
-              <HomeIcon />
-            </ListItemIcon>
-            <ListItemText primary="Home" primaryTypographyProps={{ fontWeight: selectedModule === "home" ? 700 : 500 }} />
-          </ListItemButton>
-        </ListItem>
-
-        {/* Navbar - Shows when NavBuilder card is clicked (controlled by parent) */}
-        {showNavbarInSidebar && (
-          <ListItem disablePadding sx={{ mb: 0.5 }}>
-            <ListItemButton
-              onClick={() => setSelectedModule("navbar")}
-              sx={{
-                borderRadius: 1.5,
-                py: 1.1,
-                px: 1.5,
-                bgcolor: selectedModule === "navbar" ? "#f39c12" : "transparent",
-                color: selectedModule === "navbar" ? "#17202a" : "#dfe6e9",
-                textTransform: "none",
-                "&:hover": { bgcolor: selectedModule === "navbar" ? "#e67e22" : "rgba(255,255,255,0.06)" },
-              }}
-            >
-              <ListItemIcon sx={{ color: selectedModule === "navbar" ? "#17202a" : "#f39c12", minWidth: 36 }}>
-                <MenuIcon />
-              </ListItemIcon>
-              <ListItemText primary="Navbar" primaryTypographyProps={{ fontWeight: selectedModule === "navbar" ? 700 : 500 }} />
-            </ListItemButton>
-          </ListItem>
+    <Box
+      component="aside"
+      sx={{
+        width: open ? SIDEBAR_WIDTH : COLLAPSED_WIDTH,
+        bgcolor: "#17202a",
+        color: "#ecf0f1",
+        height: `calc(100vh - ${topbarHeight}px)`,
+        position: "fixed",
+        top: topbarHeight,
+        left: 0,
+        overflow: "hidden",
+        transition: "width 240ms cubic-bezier(.2,.8,.2,1)",
+        borderRight: open ? "1px solid rgba(255,255,255,0.04)" : "1px solid rgba(255,255,255,0.02)",
+        zIndex: 1300,
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
+      }}
+    >
+      <Box sx={{ p: open ? 2 : 1 }}>
+        {open && (
+          <Typography variant="h6" sx={{ mb: 2, fontWeight: 700, color: "#f7c948" }}>
+            CMS
+          </Typography>
         )}
 
-        {/* Your Layout */}
-        <ListItem disablePadding sx={{ mb: 0.5 }}>
-          <ListItemButton
-            onClick={() => setSelectedModule("yourLayout")}
-            sx={{
-              borderRadius: 1.5,
-              py: 1.1,
-              px: 1.5,
-              bgcolor: selectedModule === "yourLayout" ? "#f39c12" : "transparent",
-              color: selectedModule === "yourLayout" ? "#17202a" : "#dfe6e9",
-              textTransform: "none",
-              "&:hover": { bgcolor: selectedModule === "yourLayout" ? "#e67e22" : "rgba(255,255,255,0.06)" },
-            }}
-          >
-            <ListItemIcon sx={{ color: selectedModule === "yourLayout" ? "#17202a" : "#f39c12", minWidth: 36 }}>
-              <ViewQuilt />
-            </ListItemIcon>
-            <ListItemText primary="Your Layout" primaryTypographyProps={{ fontWeight: selectedModule === "yourLayout" ? 700 : 500 }} />
-          </ListItemButton>
-        </ListItem>
-      </List>
+        <List disablePadding>
+          <ListItem disablePadding sx={{ mb: 0.5 }}>
+            <ListItemButton onClick={() => setSelectedModule && setSelectedModule("home")} sx={itemSx(selectedModule === "home")}>
+              <ListItemIcon sx={iconSx(selectedModule === "home")}>
+                <HomeIcon />
+              </ListItemIcon>
+              {open && <ListItemText primary="Home" primaryTypographyProps={{ fontWeight: selectedModule === "home" ? 700 : 500 }} />}
+            </ListItemButton>
+          </ListItem>
 
-      <Divider sx={{ my: 2, borderColor: "rgba(255,255,255,0.06)" }} />
+          {showNavbarInSidebar && (
+            <ListItem disablePadding sx={{ mb: 0.5 }}>
+              <ListItemButton onClick={() => setSelectedModule && setSelectedModule("navbar")} sx={itemSx(selectedModule === "navbar")}>
+                <ListItemIcon sx={iconSx(selectedModule === "navbar")}>
+                  <MenuIcon />
+                </ListItemIcon>
+                {open && <ListItemText primary="Navbar" primaryTypographyProps={{ fontWeight: selectedModule === "navbar" ? 700 : 500 }} />}
+              </ListItemButton>
+            </ListItem>
+          )}
 
-      <Typography variant="caption" sx={{ opacity: 0.8 }}>
-        Selected: {String(selectedModule).toUpperCase()}
-      </Typography>
+          <ListItem disablePadding sx={{ mb: 0.5 }}>
+            <ListItemButton onClick={() => setSelectedModule && setSelectedModule("yourLayout")} sx={itemSx(selectedModule === "yourLayout")}>
+              <ListItemIcon sx={iconSx(selectedModule === "yourLayout")}>
+                <ViewQuiltIcon />
+              </ListItemIcon>
+              {open && <ListItemText primary="Your Layout" primaryTypographyProps={{ fontWeight: selectedModule === "yourLayout" ? 700 : 500 }} />}
+            </ListItemButton>
+          </ListItem>
+        </List>
+      </Box>
+
+      <Box sx={{ p: open ? 2 : 1 }}>
+        <Divider sx={{ borderColor: "rgba(255,255,255,0.06)", mb: open ? 1.5 : 0 }} />
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: open ? "space-between" : "center" }}>
+          {open ? (
+            <Typography variant="caption" sx={{ opacity: 0.8 }}>
+              Selected: {String(selectedModule).toUpperCase()}
+            </Typography>
+          ) : (
+            <Tooltip title={`Selected: ${String(selectedModule).toUpperCase()}`}>
+              <Box sx={{ width: 32, height: 32 }} />
+            </Tooltip>
+          )}
+        </Box>
+      </Box>
     </Box>
   );
 };

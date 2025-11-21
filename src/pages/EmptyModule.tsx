@@ -3,7 +3,7 @@ import React from "react";
 import { Box, Typography, Paper } from "@mui/material";
 import { PageProps } from "../types/routes";
 
-const EmptyModule: React.FC<PageProps> = ({ moduleName = "This module" }) => (
+const EmptyModule: React.FC<PageProps> = ({ moduleName = "Your Layout" }) => (
   <Box sx={{ p: { xs: 2, md: 6 }, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "#f5f7f8" }}>
     <Paper elevation={3} sx={{ p: { xs: 3, md: 6 }, borderRadius: 2, textAlign: "center", maxWidth: 720 }}>
       <Typography variant="h4" sx={{ color: "#2c3e50", fontWeight: 700, mb: 1 }}>

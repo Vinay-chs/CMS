@@ -1,4 +1,4 @@
-//src/pages/Carousal.tsx
+// src/pages/Carousal.tsx
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   Box,
@@ -38,10 +38,12 @@ import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import ArrowBack from "@mui/icons-material/ArrowBack";
 import { PageProps } from "../types/routes";
+
 /* ------------------------------
     BACKEND API CONFIG
     ------------------------------ */
 const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:8080/api";
+
 /* ------------------------------
     Types
     ------------------------------ */
@@ -54,6 +56,7 @@ export type Slide = {
   image?: string;
   darkOverlay?: boolean;
 };
+
 export type CarouselStyle = {
   id: string;
   name: string;
@@ -61,21 +64,25 @@ export type CarouselStyle = {
   type: "hero" | "card" | "uneven" | "center" | "bootstrap";
   sampleImage: string;
 };
+
 export type CarouselSize = {
   width: string;
   height: string;
 };
+
 export type CarouselProps = {
   slides: Slide[];
   onCTAClick?: (slide: Slide) => void;
   size: CarouselSize;
   interval: number;
 };
+
 /* ------------------------------
     Constants
     ------------------------------ */
-const STORAGE_KEY = "user_carousel_config_pro_v11";
+const STORAGE_KEY = "user_carousel_config_pro_v12"; // Version update
 const PREVIEW_KEY = "preview_carousel";
+
 const CAROUSEL_STYLES: CarouselStyle[] = [
   {
     id: "hero",
@@ -113,6 +120,7 @@ const CAROUSEL_STYLES: CarouselStyle[] = [
     sampleImage: "https://images.unsplash.com/photo-1556740758-90de374c12ad?auto=format&fit=crop&w=400&q=80",
   },
 ];
+
 /* ------------------------------
     CAROUSEL COMPONENTS
     ------------------------------ */
@@ -278,6 +286,7 @@ function HeroCarousel({ slides, onCTAClick, size, interval }: CarouselProps) {
     </Box>
   );
 }
+
 function CardCarousel({ slides, onCTAClick, size, interval }: CarouselProps) {
   const [index, setIndex] = useState(0);
   const theme = useTheme();
@@ -402,6 +411,7 @@ function CardCarousel({ slides, onCTAClick, size, interval }: CarouselProps) {
     </Box>
   );
 }
+
 function UnevenCarousel({ slides, onCTAClick, size, interval }: CarouselProps) {
   const [index, setIndex] = useState(0);
   const theme = useTheme();
@@ -534,6 +544,7 @@ function UnevenCarousel({ slides, onCTAClick, size, interval }: CarouselProps) {
     </Box>
   );
 }
+
 function CenterCarousel({ slides, onCTAClick, size, interval }: CarouselProps) {
   const [index, setIndex] = useState(0);
   const theme = useTheme();
@@ -629,6 +640,7 @@ function CenterCarousel({ slides, onCTAClick, size, interval }: CarouselProps) {
     </Box>
   );
 }
+
 function BootstrapCarousel({ slides, onCTAClick, size, interval }: CarouselProps) {
   const [index, setIndex] = useState(0);
   useEffect(() => {
@@ -759,6 +771,7 @@ function BootstrapCarousel({ slides, onCTAClick, size, interval }: CarouselProps
     </Box>
   );
 }
+
 /* ------------------------------
     MAIN PAGE
     ------------------------------ */
@@ -767,6 +780,7 @@ export default function Carousal({ setSelectedModule }: PageProps) {
   const [slides, setSlides] = useState<Slide[]>([]);
   const [carouselId, setCarouselId] = useState<string | null>(null);
   const [carouselSiteId, setCarouselSiteId] = useState<string>("");
+  const [carouselSlug, setCarouselSlug] = useState<string>(""); // ✅ SLUG STATE
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -801,6 +815,11 @@ export default function Carousal({ setSelectedModule }: PageProps) {
   const invalidInputOkButtonRef = useRef<HTMLButtonElement | null>(null);
   const [isSaved, setIsSaved] = useState(false);
 
+  // ✅ SLUG VALIDATION
+  const validateSlug = (slug: string) => {
+    return /^[a-z0-9-]+$/.test(slug);
+  };
+
   // ==================== Utility: persist current state to localStorage ====================
   const persistLocal = (opts?: {
     selectedStyle?: CarouselStyle | null;
@@ -808,6 +827,7 @@ export default function Carousal({ setSelectedModule }: PageProps) {
     carouselSize?: CarouselSize;
     slideInterval?: number;
     carouselSiteId?: string;
+    carouselSlug?: string; // ✅ SLUG INCLUDED
     carouselId?: string | null;
   }) => {
     const payload = {
@@ -816,6 +836,7 @@ export default function Carousal({ setSelectedModule }: PageProps) {
       carouselSize: opts?.carouselSize ?? carouselSize,
       slideInterval: opts?.slideInterval ?? slideIntervalMs,
       carouselSiteId: opts?.carouselSiteId ?? carouselSiteId,
+      carouselSlug: opts?.carouselSlug ?? carouselSlug, // ✅ SLUG INCLUDED
       carouselId: opts?.carouselId ?? carouselId,
     };
     try {
@@ -836,6 +857,16 @@ export default function Carousal({ setSelectedModule }: PageProps) {
       setError("Carousel Site ID is required!");
       return;
     }
+    // ✅ SLUG VALIDATION
+    if (!carouselSlug.trim()) {
+      setError("Carousel Slug is required!");
+      return;
+    }
+    if (!validateSlug(carouselSlug)) {
+      setError("Slug can only contain lowercase letters, numbers, and hyphens");
+      return;
+    }
+
     setSaving(true);
     setError(null);
     setSuccess(null);
@@ -851,6 +882,7 @@ export default function Carousal({ setSelectedModule }: PageProps) {
           height: carouselSize.height,
           intervalMs: slideIntervalMs,
           carouselSiteId: carouselSiteId.trim(),
+          slug: carouselSlug.trim(), // ✅ SLUG INCLUDED
         };
         const createRes = await fetch(`${API_BASE_URL}/carousels`, {
           method: "POST",
@@ -866,6 +898,7 @@ export default function Carousal({ setSelectedModule }: PageProps) {
         width: carouselSize.width,
         height: carouselSize.height,
         intervalMs: slideIntervalMs,
+        slug: carouselSlug, // ✅ SLUG INCLUDED
         slides: slides.map((s, i) => ({
           position: i,
           title: s.title || null,
@@ -882,7 +915,7 @@ export default function Carousal({ setSelectedModule }: PageProps) {
         body: JSON.stringify(completePayload),
       });
       if (!saveRes.ok) throw new Error(await saveRes.text());
-      setSuccess("Carousels are saved!");
+      setSuccess(`Carousel saved with slug: ${carouselSlug}`);
       setIsSaved(true);
 
       // persist backend-saved state to localStorage so UI survives refresh/navigation
@@ -892,6 +925,7 @@ export default function Carousal({ setSelectedModule }: PageProps) {
         carouselSize,
         slideInterval: slideIntervalMs,
         carouselSiteId,
+        carouselSlug, // ✅ SLUG INCLUDED
         carouselId: finalCarouselId,
       });
 
@@ -903,6 +937,7 @@ export default function Carousal({ setSelectedModule }: PageProps) {
       setSaving(false);
     }
   };
+
   const loadFromBackend = async (id: string) => {
     setLoading(true);
     try {
@@ -913,6 +948,7 @@ export default function Carousal({ setSelectedModule }: PageProps) {
       setSelectedStyle(style);
       setCarouselId(data.id);
       setCarouselSiteId(data.carouselSiteId || "");
+      setCarouselSlug(data.slug || ""); // ✅ SLUG RESTORED
       setCarouselSize({ width: data.width, height: data.height });
       setSlideIntervalMs(data.intervalMs);
       setSlideIntervalSec(data.intervalMs / 1000);
@@ -936,6 +972,7 @@ export default function Carousal({ setSelectedModule }: PageProps) {
         carouselSize: { width: data.width, height: data.height },
         slideInterval: data.intervalMs,
         carouselSiteId: data.carouselSiteId || "",
+        carouselSlug: data.slug || "", // ✅ SLUG INCLUDED
         carouselId: data.id,
       });
     } catch (err: any) {
@@ -969,6 +1006,7 @@ export default function Carousal({ setSelectedModule }: PageProps) {
               setPrevSlideIntervalSec(parsed.slideInterval / 1000);
             }
             if (parsed.carouselSiteId) setCarouselSiteId(parsed.carouselSiteId);
+            if (parsed.carouselSlug) setCarouselSlug(parsed.carouselSlug); // ✅ SLUG RESTORED
             if (parsed.carouselId) setCarouselId(parsed.carouselId);
             // persist preview into normal storage so editor uses it going forward
             persistLocal({
@@ -977,6 +1015,7 @@ export default function Carousal({ setSelectedModule }: PageProps) {
               carouselSize: parsed.carouselSize,
               slideInterval: parsed.slideIntervalMs ?? parsed.slideInterval,
               carouselSiteId: parsed.carouselSiteId,
+              carouselSlug: parsed.carouselSlug, // ✅ SLUG INCLUDED
               carouselId: parsed.carouselId,
             });
             return;
@@ -1000,6 +1039,7 @@ export default function Carousal({ setSelectedModule }: PageProps) {
           setPrevSlideIntervalSec(ms / 1000);
         }
         if (parsed.carouselSiteId) setCarouselSiteId(parsed.carouselSiteId);
+        if (parsed.carouselSlug) setCarouselSlug(parsed.carouselSlug); // ✅ SLUG RESTORED
         if (parsed.carouselId) setCarouselId(parsed.carouselId);
       }
     } catch {
@@ -1028,7 +1068,7 @@ export default function Carousal({ setSelectedModule }: PageProps) {
     if (isSaved) setIsSaved(false);
     // we do not put persistLocal in dependencies to avoid infinite loop; it's stable
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedStyle, slides, carouselSize, slideIntervalMs, carouselSiteId]);
+  }, [selectedStyle, slides, carouselSize, slideIntervalMs, carouselSiteId, carouselSlug]);
 
   // ==================== HANDLERS ====================
   function openAdd() {
@@ -1117,13 +1157,21 @@ export default function Carousal({ setSelectedModule }: PageProps) {
       setShowSaveAlert(true);
       return;
     }
-    const previewData = { carouselId, selectedStyle, slides, carouselSize, slideIntervalMs, carouselSiteId };
+    const previewData = { 
+      carouselId, 
+      selectedStyle, 
+      slides, 
+      carouselSize, 
+      slideIntervalMs, 
+      carouselSiteId,
+      carouselSlug // ✅ SLUG INCLUDED
+    };
     try {
       localStorage.setItem(PREVIEW_KEY, JSON.stringify(previewData));
     } catch {
       // ignore
     }
-    setSuccess("Carousel preview saved! Check Your Layout.");
+    setSuccess(`Carousel preview saved with slug: ${carouselSlug}! Check Your Layout.`);
     setTimeout(() => setSuccess(null), 3000);
   };
   const handleClearAll = async () => {
@@ -1156,6 +1204,7 @@ export default function Carousal({ setSelectedModule }: PageProps) {
     setSlides([]);
     setCarouselId(null);
     setCarouselSiteId("");
+    setCarouselSlug(""); // ✅ SLUG CLEARED
     setCarouselSize({ width: "100%", height: "500px" });
     setSlideIntervalMs(5000);
     setSlideIntervalSec(5);
@@ -1293,7 +1342,7 @@ export default function Carousal({ setSelectedModule }: PageProps) {
     return (
       <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 1200, margin: "0 auto" }}>
         <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-          <IconButton onClick={() => setSelectedModule("home")}>
+          <IconButton onClick={() => setSelectedModule?.("home")}>
             <ArrowBack />
           </IconButton>
           <Typography variant="h4" fontWeight="bold" textAlign="center">
@@ -1305,7 +1354,7 @@ export default function Carousal({ setSelectedModule }: PageProps) {
         </Typography>
         <Grid container spacing={3} justifyContent="center">
           {CAROUSEL_STYLES.map((style) => (
-            <Grid  key={style.id} >
+            <Grid  key={style.id}>
               <Card
                 sx={{
                   cursor: "pointer",
@@ -1381,7 +1430,7 @@ export default function Carousal({ setSelectedModule }: PageProps) {
               color="success"
               size="large"
               onClick={saveToBackend}
-              disabled={saving || slides.length === 0 || !carouselSiteId.trim()}
+              disabled={saving || slides.length === 0 || !carouselSiteId.trim() || !carouselSlug.trim()}
               ref={saveButtonRef}
               sx={{
                 borderRadius: 3,
@@ -1397,22 +1446,42 @@ export default function Carousal({ setSelectedModule }: PageProps) {
           </Box>
         </Box>
       </Box>
-      {/* Carousel Site ID Input */}
+
+      {/* Carousel Site ID & Slug Input */}
       <Box sx={{ p: 2, bgcolor: "background.paper", borderBottom: 1, borderColor: "divider" }}>
-        <TextField
-          fullWidth
-          label="Carousel Site ID (Required)"
-          value={carouselSiteId}
-          onChange={(e) => {
-            setCarouselSiteId(e.target.value);
-            persistLocal({ carouselSiteId: e.target.value });
-          }}
-          error={slides.length > 0 && !carouselSiteId.trim()}
-          helperText={slides.length > 0 && !carouselSiteId.trim() ? "Required to save" : "Used to load carousel on specific page"}
-          size="small"
-          sx={{ maxWidth: 500 }}
-        />
+        <Grid container spacing={2}>
+          <Grid  >
+            <TextField
+              fullWidth
+              label="Carousel Site ID (Required)"
+              value={carouselSiteId}
+              onChange={(e) => {
+                setCarouselSiteId(e.target.value);
+                persistLocal({ carouselSiteId: e.target.value });
+              }}
+              error={slides.length > 0 && !carouselSiteId.trim()}
+              helperText={slides.length > 0 && !carouselSiteId.trim() ? "Required to save" : "Used to load carousel on specific page"}
+              size="small"
+            />
+          </Grid>
+          <Grid  >
+            <TextField
+              fullWidth
+              label="Carousel Slug (Required)"
+              value={carouselSlug}
+              onChange={(e) => {
+                setCarouselSlug(e.target.value);
+                persistLocal({ carouselSlug: e.target.value });
+              }}
+              error={slides.length > 0 && (!carouselSlug.trim() || !validateSlug(carouselSlug))}
+              helperText={slides.length > 0 && !carouselSlug.trim() ? "Required to save" : "URL-friendly name (e.g., homepage-banner)"}
+              size="small"
+              placeholder="homepage-banner"
+            />
+          </Grid>
+        </Grid>
       </Box>
+
       {/* Alerts */}
       <Collapse in={!!error && slides.length === 0}>
         <Alert severity="warning" sx={{ borderRadius: 2, m: 2 }}>
@@ -1570,7 +1639,7 @@ export default function Carousal({ setSelectedModule }: PageProps) {
                       <Box sx={{ p: 2, border: 1, borderColor: "divider", borderRadius: 1, bgcolor: "grey.50" }}>
                         <Typography variant="subtitle2" gutterBottom>Customize Carousel Dimensions</Typography>
                         <Grid container spacing={2}>
-                          <Grid >
+                          <Grid  >
                             <TextField
                               fullWidth
                               label="Width"
@@ -1584,7 +1653,7 @@ export default function Carousal({ setSelectedModule }: PageProps) {
                               helperText="e.g., 100%, 800px"
                             />
                           </Grid>
-                          <Grid >
+                          <Grid  >
                             <TextField
                               fullWidth
                               label="Height"
@@ -1650,7 +1719,7 @@ export default function Carousal({ setSelectedModule }: PageProps) {
               </Box>
             </Box>
             <Box sx={{ overflow: "visible", p: 4, bgcolor: "grey.50", display: "block" }}>
-              <Typography variant="h5" fontWeight="medium" sx={{ mb: 2 }}>Live Preview</Typography>
+              <Typography variant="h5" fontWeight="medium" sx={{ mb: 2 }}>Live Preview {carouselSlug && `- Slug: ${carouselSlug}`}</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
                 Changes are saved manually. Click 'Save Carousels' to persist.
               </Typography>

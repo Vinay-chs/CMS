@@ -3,9 +3,22 @@ import React from "react";
 import HomeIcon from "@mui/icons-material/Home";
 import MenuIcon from "@mui/icons-material/Menu";
 import SlideshowIcon from "@mui/icons-material/Slideshow";
-import { RouteConfig } from "../types/routes"; // <- fixed relative path
+import PeopleIcon from "@mui/icons-material/People";
+import MailOutlineIcon from "@mui/icons-material/MailOutline";
+import InfoIcon from "@mui/icons-material/Info";
+import { RouteConfig } from "../types/routes";
+import OnboardingWizard from "../pages/OnboardingWizard";
+import RocketLaunchIcon from "@mui/icons-material/RocketLaunch";
+
 
 export const routeMap: RouteConfig[] = [
+  {
+  key: "onboarding",
+  label: "Get Started",
+  path: "/onboarding",
+  component: "OnboardingWizard",
+  icon: <RocketLaunchIcon />,
+},
   {
     key: "home",
     label: "Home",
@@ -34,4 +47,33 @@ export const routeMap: RouteConfig[] = [
     component: "YourLayoutModule",
     icon: <HomeIcon />,
   },
+  {
+    key: "footer",
+    label: "Footer",
+    path: "/footer",
+    component: "FooterModule",
+    icon: <MenuIcon />,
+  },
+  {
+    key: "testimonials",
+    label: "Testimonials",
+    path: "/testimonials",
+    component: "TestimonialsModule",
+    icon: <PeopleIcon />,
+  },
+  {
+    key: "newsletter",
+    label: "Newsletter",
+    path: "/newsletter",
+    component: "NewsletterModule",
+    icon: <MailOutlineIcon />,
+  },
+  {
+    key: "team",
+    label: "Team",
+    path: "/team",
+    component: "TeamModule",
+    icon: <InfoIcon />,
+  },
+  
 ];
