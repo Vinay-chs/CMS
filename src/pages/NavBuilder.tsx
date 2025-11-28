@@ -26,6 +26,7 @@ import {
   Tooltip,
   FormControlLabel,
   Checkbox,
+  InputAdornment,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import SaveIcon from "@mui/icons-material/Save";
@@ -66,11 +67,14 @@ interface CarticonPayload {
   position?: string;
 }
 
+type NavbarStyle = "none" | "round" | "square";
+
 interface CustomNavbarConfigPayload {
   userId: string;
   configName: string;
   siteId: string;
   slug?: string;
+  style?: NavbarStyle; // ✅ style stored on navbarConfig too
   jsonConfig: string;
   isActive: boolean;
 }
@@ -88,13 +92,15 @@ type AvailableComponentLocal = {
   description?: string;
 };
 
-type NavbarStyle = "none" | "round" | "square";
-
 interface ConfigWithStyle extends NavbarConfig {
   style: NavbarStyle;
 }
 
-const availableNavbarStyles: { value: NavbarStyle; label: string; description: string }[] = [
+const availableNavbarStyles: {
+  value: NavbarStyle;
+  label: string;
+  description: string;
+}[] = [
   { value: "none", label: "Default", description: "Clean minimal style" },
   { value: "round", label: "Rounded", description: "Soft rounded corners" },
   { value: "square", label: "Sharp", description: "Crisp square edges" },
@@ -121,22 +127,29 @@ const fileToBase64 = (file: File): Promise<string> =>
     reader.onerror = (error) => reject(error);
   });
 
-async function withRetry<T>(operation: () => Promise<T>, maxRetries: number = RETRY_COUNT): Promise<T> {
+async function withRetry<T>(
+  operation: () => Promise<T>,
+  maxRetries: number = RETRY_COUNT
+): Promise<T> {
   for (let i = 0; i < maxRetries; i++) {
     try {
       return await operation();
     } catch (err: any) {
       if (i === maxRetries - 1) throw err;
-      await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+      await new Promise((resolve) => setTimeout(resolve, 1000 * (i + 1)));
     }
   }
   throw new Error("Max retries exceeded");
 }
 
-export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: PageProps) {
+export default function NavBuilder({
+  setSelectedModule,
+  setSavedNavbarConfig,
+}: PageProps) {
   const [components, setComponents] = useState<NavbarComponent[]>([]);
   const [selected, setSelected] = useState<NavbarComponentType | "">("");
   const [siteId, setSiteId] = useState<string>("");
+  // slug state = ONLY inner part user types (e.g. "home")
   const [slug, setSlug] = useState<string>("");
   const [baseSlug, setBaseSlug] = useState<string>("");
   const [siteIdError, setSiteIdError] = useState(false);
@@ -144,7 +157,8 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
   const [navbarColor, setNavbarColor] = useState<string>("#1976d2");
   const [theme, setTheme] = useState<NavbarTheme>("light");
   const [navbarStyle, setNavbarStyle] = useState<NavbarStyle>("none");
-  const [availableComponents, setAvailableComponents] = useState<AvailableComponentLocal[]>([]);
+  const [availableComponents, setAvailableComponents] =
+    useState<AvailableComponentLocal[]>([]);
   const [loadingComponents, setLoadingComponents] = useState(true);
   const [resettingNavbar, setResettingNavbar] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -154,23 +168,34 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
   const [tempColor, setTempColor] = useState<string>(navbarColor);
   const [prevColor, setPrevColor] = useState<string>(navbarColor);
 
-  const [pendingFiles, setPendingFiles] = useState<Record<string, File | null>>({});
+  const [pendingFiles, setPendingFiles] = useState<
+    Record<string, File | null>
+  >({});
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
   const previewUrlsRef = useRef(previewUrls);
-  useEffect(() => { previewUrlsRef.current = previewUrls; }, [previewUrls]);
+  useEffect(() => {
+    previewUrlsRef.current = previewUrls;
+  }, [previewUrls]);
 
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
-  const [snackbarSeverity, setSnackbarSeverity] = useState<"success" | "info" | "warning" | "error">("success");
-  const handleCloseSnackbar = (_: any, reason?: string) => { if (reason === "clickaway") return; setSnackbarOpen(false); };
+  const [snackbarSeverity, setSnackbarSeverity] = useState<
+    "success" | "info" | "warning" | "error"
+  >("success");
+  const handleCloseSnackbar = (_: any, reason?: string) => {
+    if (reason === "clickaway") return;
+    setSnackbarOpen(false);
+  };
 
   const [isSaved, setIsSaved] = useState(false);
-  const [savedConfigId, setSavedConfigId] = useState<number | string | null>(null);
+  const [savedConfigId, setSavedConfigId] = useState<number | string | null>(
+    null
+  );
   const [savedConfigHash, setSavedConfigHash] = useState<string | null>(null);
 
-  // Load base slug from localStorage
+  // Load base slug from localStorage (Website URL / IP from Welcome page)
   useEffect(() => {
-    const savedBaseSlug = localStorage.getItem('cms_base_slug');
+    const savedBaseSlug = localStorage.getItem("cms_base_slug");
     if (savedBaseSlug) {
       setBaseSlug(savedBaseSlug);
     }
@@ -178,12 +203,27 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
 
   // ✅ SLUG VALIDATION
   const validateSlug = (slug: string) => {
-    return /^[a-z0-9-]+$/.test(slug);
+    return /^[a-z0-9-\/]+$/.test(slug);
   };
 
-  // ✅ GET FULL SLUG
-  const getFullSlug = (componentSlug: string) => {
-    return `${baseSlug}/${componentSlug}`;
+  // ✅ FULL SLUG COMPUTE
+  const getFullSlug = (componentSlug: string): string => {
+    const rawSlug = (componentSlug || "").trim();
+    const normalizedBase = (baseSlug || "").replace(/\/+$/, "");
+
+    // no base, just return what user typed
+    if (!normalizedBase) return rawSlug;
+
+    // if slug itself already full URL, don't touch
+    if (/^https?:\/\//i.test(rawSlug)) return rawSlug;
+
+    // if slug already starts with baseSlug, assume it's full
+    if (rawSlug.startsWith(normalizedBase)) return rawSlug;
+
+    const relative = rawSlug.replace(/^\/+/, "");
+    if (!relative) return normalizedBase;
+
+    return `${normalizedBase}/${relative}`;
   };
 
   useEffect(() => {
@@ -191,18 +231,39 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
     const fetchComponents = async () => {
       setLoadingComponents(true);
       try {
-        const res = await withRetry(() => fetch(`${BASE_URL}/uicomponent/get`));
+        const res = await withRetry(() =>
+          fetch(`${BASE_URL}/uicomponent/get`)
+        );
         if (!res.ok) throw new Error("Failed to fetch components");
         const data = await res.json();
         const seen = new Set<string>();
         const formatted: AvailableComponentLocal[] = (data || [])
-          .filter((comp: any) => comp && (comp.code || comp.display_name || comp.displayName || comp.id))
+          .filter(
+            (comp: any) =>
+              comp &&
+              (comp.code ||
+                comp.display_name ||
+                comp.displayName ||
+                comp.id)
+          )
           .map((comp: any) => {
             const rawCode = (comp.code || "").trim();
             const fallback = rawCode || `component_${comp.id}`;
-            const camelCaseCode = fallback.replace(/_([a-z])/g, (g: string) => g[1].toUpperCase());
-            const label = comp.display_name || comp.displayName || fallback || `Component ${comp.id}`;
-            return { id: comp.id, value: camelCaseCode, label, description: comp.description || "" } as AvailableComponentLocal;
+            const camelCaseCode = fallback.replace(
+              /_([a-z])/g,
+              (g: string) => g[1].toUpperCase()
+            );
+            const label =
+              comp.display_name ||
+              comp.displayName ||
+              fallback ||
+              `Component ${comp.id}`;
+            return {
+              id: comp.id,
+              value: camelCaseCode,
+              label,
+              description: comp.description || "",
+            } as AvailableComponentLocal;
           })
           .filter((c: AvailableComponentLocal) => {
             if (seen.has(c.value)) return false;
@@ -220,67 +281,150 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
       }
     };
     fetchComponents();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
+  // Restore last saved navbar from localStorage
   useEffect(() => {
     try {
-      const lastSite = localStorage.getItem('navbar_last_saved_siteId');
-      if (lastSite) {
-        const saved = localStorage.getItem(`navbar_saved_${lastSite}`);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed && parsed.components) {
-            setSiteId(parsed.siteId || lastSite);
-            setSlug(parsed.slug || "");
-            setComponents(parsed.components || []);
-            setNavbarColor(parsed.color || '#1976d2');
-            setTheme(parsed.theme || 'light');
-            setNavbarStyle(parsed.style || 'none');
-            const snapshot = JSON.stringify(parsed);
-            setSavedConfigHash(snapshot);
-            setIsSaved(true);
+      const lastSite = localStorage.getItem("navbar_last_saved_siteId");
+      if (!lastSite) return;
+
+      const saved = localStorage.getItem(`navbar_saved_${lastSite}`);
+      if (!saved) return;
+
+      const parsed = JSON.parse(saved);
+      if (!parsed || !parsed.components) return;
+
+      // Recover baseSlug from storage to split full slug
+      const storedBaseSlug = localStorage.getItem("cms_base_slug") || "";
+      if (storedBaseSlug && !baseSlug) {
+        setBaseSlug(storedBaseSlug);
+      }
+
+      const fullSlug: string = parsed.slug || "";
+      let innerSlug = "";
+
+      if (fullSlug) {
+        if (storedBaseSlug && fullSlug.startsWith(storedBaseSlug)) {
+          // remove base part
+          innerSlug = fullSlug.slice(storedBaseSlug.length);
+          innerSlug = innerSlug.replace(/^\/+/, "");
+        } else if (/^https?:\/\//i.test(fullSlug)) {
+          // full URL but base not matched – use pathname as slug
+          try {
+            const u = new URL(fullSlug);
+            innerSlug = u.pathname.replace(/^\/+/, "");
+          } catch {
+            innerSlug = fullSlug;
           }
+        } else {
+          // simple relative slug
+          innerSlug = fullSlug.replace(/^\/+/, "");
         }
       }
+
+      setSiteId(parsed.siteId || lastSite);
+      setSlug(innerSlug);
+      setComponents(parsed.components || []);
+      setNavbarColor(parsed.color || "#1976d2");
+      setTheme(parsed.theme || "light");
+      setNavbarStyle(parsed.style || "none");
+
+      const snapshot = JSON.stringify(parsed);
+      setSavedConfigHash(snapshot);
+      setIsSaved(true);
     } catch (e) {
-      console.warn('Failed to restore saved navbar from localStorage', e);
+      console.warn("Failed to restore saved navbar from localStorage", e);
     }
   }, []);
 
   const bulkDeleteLogoIds = async (ids: number[]) => {
-    return withRetry(() => fetch(`${BASE_URL}/componentlogo/bulk-delete`, {
-      method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ ids }),
-    }).then(res => {
-      if (!res.ok) throw new Error(`bulk-delete failed ${res.status}: ${res.statusText}`);
-      return res.json();
-    }));
+    return withRetry(() =>
+      fetch(`${BASE_URL}/componentlogo/bulk-delete`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ ids }),
+      }).then((res) => {
+        if (!res.ok)
+          throw new Error(
+            `bulk-delete failed ${res.status}: ${res.statusText}`
+          );
+        return res.json();
+      })
+    );
   };
 
   const deleteSingleLogoOnServer = async (logoId: number) => {
-    return withRetry(() => fetch(`${BASE_URL}/componentlogo/delete/${logoId}`, {
-      method: "DELETE", mode: "cors", headers: { Accept: "application/json" },
-    }).then(res => {
-      if (res.status === 404) throw new Error(`Not found id=${logoId}`);
-      if (!res.ok) throw new Error(`delete failed ${res.status}: ${res.statusText}`);
-      return res.json().catch(() => true);
-    }));
+    return withRetry(() =>
+      fetch(`${BASE_URL}/componentlogo/delete/${logoId}`, {
+        method: "DELETE",
+        mode: "cors",
+        headers: { Accept: "application/json" },
+      }).then((res) => {
+        if (res.status === 404) throw new Error(`Not found id=${logoId}`);
+        if (!res.ok)
+          throw new Error(`delete failed ${res.status}: ${res.statusText}`);
+        return res.json().catch(() => true);
+      })
+    );
+  };
+  
+  const deleteCarticonOnServer = async (carticonId: string) => {
+    return withRetry(() =>
+      fetch(`${BASE_URL}/componentcarticon/delete/${carticonId}`, {
+        method: "DELETE",
+        mode: "cors",
+        headers: { Accept: "application/json" },
+      }).then(async (res) => {
+        // 404 -> not found
+        if (res.status === 404) {
+          const text = await res.text().catch(() => "");
+          console.log("Deleting carticon on server:", carticonId);
+          throw new Error(`Not found id=${carticonId} ${text}`);
+        }
+        if (!res.ok) {
+          const txt = await res.text().catch(() => res.statusText || "");
+          throw new Error(`delete failed ${res.status}: ${txt}`);
+        }
+
+        // try parse JSON; backend returns either structured JSON or empty body
+        try {
+          const body = await res.json().catch(() => null);
+          // accept { success: true } OR { success: true, message: "...", id: "..." }
+          if (body === null) return true;
+          if (typeof body === "object" && ("success" in body)) {
+            if (body.success) return body;
+            throw new Error(body.message || "Delete reported failure");
+          }
+          // fallback: if server returned plain boolean true
+          if (body === true) return true;
+          // otherwise return whatever body the server sent
+          return body;
+        } catch (e) {
+          // If JSON parsing failed but response.ok, treat as success
+          return true;
+        }
+      })
+    );
   };
 
-  const deleteCarticonOnServer = async (carticonId: string) => {
-    return withRetry(() => fetch(`${BASE_URL}/componentcarticon/delete/${carticonId}`, {
-      method: "DELETE", mode: "cors", headers: { Accept: "application/json" },
-    }).then(res => {
-      if (res.status === 404) throw new Error(`Not found id=${carticonId}`);
-      if (!res.ok) throw new Error(`delete failed ${res.status}: ${res.statusText}`);
-      return res.json().catch(() => true);
-    }));
-  };
 
   const updateComponent = (id: string, patch: Partial<NavbarComponent>) =>
     setComponents((prev) =>
       prev.map((c) =>
-        c.id === id ? { ...c, ...patch, config: { ...c.config, ...(patch.config || {}) } } : c
+        c.id === id
+          ? {
+              ...c,
+              ...patch,
+              config: { ...c.config, ...(patch.config || {}) },
+            }
+          : c
       )
     );
 
@@ -303,7 +447,11 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
   };
 
   const handlePositionChange = (compId: string, newPosition: Position) => {
-    setComponents(prev => prev.map(c => c.id === compId ? { ...c, position: newPosition } : c));
+    setComponents((prev) =>
+      prev.map((c) =>
+        c.id === compId ? { ...c, position: newPosition } : c
+      )
+    );
   };
 
   const addComponent = () => {
@@ -311,16 +459,22 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
     if (components.some((c) => c.type === selected)) return;
 
     const defaultPos = defaultPositionFor(selected as NavbarComponentType);
-    const existingInPosition = components.filter(c => c.position === defaultPos);
+    const existingInPosition = components.filter(
+      (c) => c.position === defaultPos
+    );
     if (existingInPosition.length >= MAX_COMPONENTS_PER_POSITION) {
-      setSnackbarMessage(`Maximum ${MAX_COMPONENTS_PER_POSITION} components allowed in ${defaultPos.toUpperCase()}`);
+      setSnackbarMessage(
+        `Maximum ${MAX_COMPONENTS_PER_POSITION} components allowed in ${defaultPos.toUpperCase()}`
+      );
       setSnackbarSeverity("warning");
       setSnackbarOpen(true);
       return;
     }
 
     const picked = availableComponents.find((a) => a.value === selected);
-    const newComp: NavbarComponent & { componentId?: number | undefined } = {
+    const newComp: NavbarComponent & {
+      componentId?: number | undefined;
+    } = {
       id: uuid(),
       type: selected as NavbarComponentType,
       componentId: picked ? picked.id : undefined,
@@ -328,15 +482,29 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
       sequence: 1,
       config: (() => {
         switch (selected) {
-          case "logo": return { src: "", alt: "Logo" };
-          case "banner": return { src: "", alt: "Banner" };
-          case "title": return { text: "Site Title", path: "/" };
-          case "menuLinks": return { links: [{ id: uuid(), label: "Home", path: "/" }] };
-          case "searchBar": return { placeholder: "Search..." };
-          case "profileIcon": return { src: "", initials: "U" };
-          case "ctaButton": return { text: "Sign Up", url: "/signup" };
-          case "cartIcon": return { badge: 0, showTotal: false };
-          default: return {};
+          case "logo":
+            // ✅ default height/width for logo
+            return { src: "", alt: "Logo", height: 60, width: 120 };
+          case "banner":
+            // ✅ default height/width for banner
+            return { src: "", alt: "Banner", height: 200, width: 1200 };
+          case "title":
+            return { text: "Site Title", path: "/" };
+          case "menuLinks":
+            return {
+              links: [{ id: uuid(), label: "Home", path: "/" }],
+            };
+          case "searchBar":
+            return { placeholder: "Search..." };
+          case "profileIcon":
+            // ✅ default height/width for profile icon
+            return { src: "", initials: "U", height: 40, width: 40 };
+          case "ctaButton":
+            return { text: "Sign Up", url: "/signup" };
+          case "cartIcon":
+            return { badge: 0, showTotal: false };
+          default:
+            return {};
         }
       })(),
     };
@@ -350,41 +518,117 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
 
     const serverId = comp.config?.serverId;
     if (serverId) {
-      const ok = window.confirm("Delete saved component from server and remove this component?");
+      const ok = window.confirm(
+        "Delete saved component from server and remove this component?"
+      );
       if (!ok) return;
+
       try {
-        if (comp.type === "logo" || comp.type === "banner" || comp.type === "profileIcon") {
+        if (
+          comp.type === "logo" ||
+          comp.type === "banner" ||
+          comp.type === "profileIcon"
+        ) {
           await deleteSingleLogoOnServer(Number(serverId));
         } else if (comp.type === "cartIcon") {
           await deleteCarticonOnServer(serverId as string);
         }
-        updateComponent(comp.id, { config: { ...comp.config, serverId: undefined } });
-        setSnackbarMessage("Component removed successfully");
+
+        // Remove component from local state (completely) after successful server delete
+        setComponents((prev) => prev.filter((p) => p.id !== id));
+
+        // cleanup previews/pending files
+        const url = previewUrlsRef.current[id];
+        if (url) {
+          try {
+            URL.revokeObjectURL(url);
+          } catch {}
+          setPreviewUrls((p) => {
+            const copy = { ...p };
+            delete copy[id];
+            return copy;
+          });
+        }
+        setPendingFiles((p) => {
+          const copy = { ...p };
+          delete copy[id];
+          return copy;
+        });
+
+        setSnackbarMessage("Component deleted from server and removed");
         setSnackbarSeverity("success");
         setSnackbarOpen(true);
       } catch (err: any) {
         console.error("removeComponent delete error:", err);
-        updateComponent(comp.id, { config: { ...comp.config, serverId: undefined } });
-        setSnackbarMessage(`Failed to delete from server: ${err.message}. Removed locally.`);
-        setSnackbarSeverity("warning");
-        setSnackbarOpen(true);
+
+        // If server delete failed, ask user whether to still remove locally
+        const removeLocally = window.confirm(
+          `Failed to delete on server: ${err?.message || err}. Remove locally anyway?`
+        );
+        if (removeLocally) {
+          setComponents((prev) => prev.filter((p) => p.id !== id));
+          const url = previewUrlsRef.current[id];
+          if (url) {
+            try {
+              URL.revokeObjectURL(url);
+            } catch {}
+            setPreviewUrls((p) => {
+              const copy = { ...p };
+              delete copy[id];
+              return copy;
+            });
+          }
+          setPendingFiles((p) => {
+            const copy = { ...p };
+            delete copy[id];
+            return copy;
+          });
+          setSnackbarMessage("Component removed locally");
+          setSnackbarSeverity("warning");
+          setSnackbarOpen(true);
+        } else {
+          // user chose to keep it locally
+          setSnackbarMessage("Component kept locally");
+          setSnackbarSeverity("info");
+          setSnackbarOpen(true);
+        }
       }
     } else {
       const ok = window.confirm("Remove this component?");
       if (!ok) return;
+
+      // No server id -> simply remove locally
+      const url = previewUrlsRef.current[id];
+      if (url) {
+        try {
+          URL.revokeObjectURL(url);
+        } catch {}
+      }
+      setPreviewUrls((p) => {
+        const copy = { ...p };
+        delete copy[id];
+        return copy;
+      });
+      setPendingFiles((p) => {
+        const copy = { ...p };
+        delete copy[id];
+        return copy;
+      });
+      setComponents((prev) => prev.filter((p) => p.id !== id));
+
       setSnackbarMessage("Component removed");
       setSnackbarSeverity("info");
       setSnackbarOpen(true);
     }
-
-    const url = previewUrlsRef.current[id];
-    if (url) { URL.revokeObjectURL(url); setPreviewUrls((p) => { const copy = {...p}; delete copy[id]; return copy; }); }
-    setPendingFiles((p) => { const copy = {...p}; delete copy[id]; return copy; });
-
-    setComponents((prev) => prev.filter((p) => p.id !== id));
   };
 
-  const updateMenuLink = (compId: string, linkId: string, field: "label" | "path", value: string) =>
+
+  const updateMenuLink = (
+    compId: string,
+    linkId: string,
+    field: "label" | "path",
+    value: string
+  ) =>
     setComponents((prev) =>
       prev.map((c) =>
         c.id === compId
@@ -392,7 +636,9 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
               ...c,
               config: {
                 ...c.config,
-                links: (c.config?.links || []).map((l: any) => l.id === linkId ? { ...l, [field]: value } : l),
+                links: (c.config?.links || []).map((l: any) =>
+                  l.id === linkId ? { ...l, [field]: value } : l
+                ),
               },
             }
           : c
@@ -402,31 +648,52 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
   const addMenuLink = (compId: string) =>
     setComponents((prev) =>
       prev.map((c) =>
-        c.id === compId ? { ...c, config: { ...c.config, links: [...(c.config?.links || []), { id: uuid(), label: "New", path: "/" }] } } : c
+        c.id === compId
+          ? {
+              ...c,
+              config: {
+                ...c.config,
+                links: [
+                  ...(c.config?.links || []),
+                  { id: uuid(), label: "New", path: "/" },
+                ],
+              },
+            }
+          : c
       )
     );
 
   const removeMenuLink = (compId: string, linkId: string) =>
     setComponents((prev) =>
       prev.map((c) =>
-        c.id === compId ? { ...c, config: { ...c.config, links: (c.config?.links || []).filter((l: any) => l.id !== linkId) } } : c
+        c.id === compId
+          ? {
+              ...c,
+              config: {
+                ...c.config,
+                links: (c.config?.links || []).filter(
+                  (l: any) => l.id !== linkId
+                ),
+              },
+            }
+          : c
       )
     );
 
-  const leftComps = components.filter(c => c.position === 'left');
-  const centerComps = components.filter(c => c.position === 'center');
-  const rightComps = components.filter(c => c.position === 'right');
+  const leftComps = components.filter((c) => c.position === "left");
+  const centerComps = components.filter((c) => c.position === "center");
+  const rightComps = components.filter((c) => c.position === "right");
   const displayComponents = [...leftComps, ...centerComps, ...rightComps];
 
-  const exportData: ConfigWithStyle & { slug?: string } = { 
-    siteId, 
-    slug: getFullSlug(slug), // ✅ FULL SLUG WITH BASE
-    components: displayComponents, 
-    color: navbarColor, 
-    theme, 
-    style: navbarStyle, 
-    version: 1, 
-    published: false 
+  const exportData: ConfigWithStyle & { slug?: string } = {
+    siteId,
+    slug: getFullSlug(slug), // ✅ FULL SLUG WITH BASE (no double)
+    components: displayComponents,
+    color: navbarColor,
+    theme,
+    style: navbarStyle,
+    version: 1,
+    published: false,
   };
 
   const saveNavbarConfig = async (): Promise<any | null> => {
@@ -454,7 +721,9 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
 
       if (!validateSlug(slug)) {
         setSlugError(true);
-        setSnackbarMessage("Slug can only contain lowercase letters, numbers, and hyphens");
+        setSnackbarMessage(
+          "Slug can only contain lowercase letters, numbers, hyphens and '/'"
+        );
         setSnackbarSeverity("warning");
         setSnackbarOpen(true);
         setIsSaving(false);
@@ -464,15 +733,19 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
       setSiteIdError(false);
       setSlugError(false);
 
-      const currentSnapshotObj = { 
-        siteId, 
-        slug: getFullSlug(slug), // ✅ FULL SLUG WITH BASE
-        components: components.map((c: any) => ({ type: c.type, position: c.position, config: c.config })), 
-        color: navbarColor, 
-        theme, 
-        style: navbarStyle, 
-        version: 1, 
-        published: false 
+      const currentSnapshotObj = {
+        siteId,
+        slug: getFullSlug(slug),
+        components: components.map((c: any) => ({
+          type: c.type,
+          position: c.position,
+          config: c.config,
+        })),
+        color: navbarColor,
+        theme,
+        style: navbarStyle,
+        version: 1,
+        published: false,
       };
       const currentSnapshot = JSON.stringify(currentSnapshotObj);
 
@@ -499,15 +772,32 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
         const logoCfg = logoComp.config || {};
         const backendComponentId = (logoComp as any).componentId;
 
-        logoPayload = { alt: logoCfg.alt, component: backendComponentId ? { id: backendComponentId } : undefined, position: logoComp.position };
+        logoPayload = {
+          alt: logoCfg.alt,
+          component: backendComponentId ? { id: backendComponentId } : undefined,
+          position: logoComp.position,
+        };
 
         if (logoFile) {
           const base64String = await fileToBase64(logoFile);
-          logoPayload = { ...logoPayload, src: base64String, uploaded: true, contentType: logoFile.type };
-        } else if (logoCfg.src && typeof logoCfg.src === "string" && logoCfg.src.startsWith("http")) {
+          logoPayload = {
+            ...logoPayload,
+            src: base64String,
+            uploaded: true,
+            contentType: logoFile.type,
+          };
+        } else if (
+          logoCfg.src &&
+          typeof logoCfg.src === "string" &&
+          logoCfg.src.startsWith("http")
+        ) {
           logoPayload = { ...logoPayload, src: logoCfg.src, uploaded: false };
         } else if (logoCfg.serverId) {
-          logoPayload = { ...logoPayload, src: logoCfg.src, uploaded: false };
+          logoPayload = {
+            ...logoPayload,
+            src: logoCfg.src,
+            uploaded: false,
+          };
         }
       }
 
@@ -527,22 +817,28 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
         userId: uuid(),
         configName: `Navbar-${siteId}-${new Date().toISOString()}`,
         siteId: siteId,
-        slug: getFullSlug(slug), // ✅ FULL SLUG WITH BASE
+        slug: getFullSlug(slug),
+        style: navbarStyle, // ✅ style persisted on navbarConfig
         jsonConfig: JSON.stringify(currentSnapshotObj),
         isActive: true,
       };
-      const combinedRequest: NavbarCreationRequest = { 
-        navbarConfig: customNavbarConfigPayload, 
+      const combinedRequest: NavbarCreationRequest = {
+        navbarConfig: customNavbarConfigPayload,
         logoPayloads: logoPayload ? [logoPayload] : [],
         carticonPayload,
       };
 
-      const res = await withRetry(() => fetch(`${BASE_URL}/custom-navbar-config/create`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(combinedRequest),
-      }));
+      const res = await withRetry(() =>
+        fetch(`${BASE_URL}/custom-navbar-config/create`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(combinedRequest),
+        })
+      );
       if (!res.ok) {
         const errorBody = await res.json().catch(() => ({}));
-        const errorMessage = errorBody.message || res.statusText || "Unknown error";
+        const errorMessage =
+          errorBody.message || res.statusText || "Unknown error";
         if (res.status === 400) {
           setSnackbarMessage("Configuration may already exist on server");
           setSnackbarSeverity("warning");
@@ -558,16 +854,28 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
 
       let updatedComponents = components.map((c) => {
         if (c.id === logoComp?.id) {
-          return { ...c, config: { ...c.config, serverId: newLogoId, src: `${BASE_URL}/componentlogo/${newLogoId}` } };
+          return {
+            ...c,
+            config: {
+              ...c.config,
+              serverId: newLogoId,
+              // src: `${BASE_URL}/componentlogo/${newLogoId}`,
+              src: c.config?.src,
+            },
+          };
         }
         return c;
       });
 
       if (carticonComp && savedConfig.navbarConfig.carticonComponent) {
-        const newCarticonId = savedConfig.navbarConfig.carticonComponent.componentId;
+        const newCarticonId =
+          savedConfig.navbarConfig.carticonComponent.componentId;
         updatedComponents = updatedComponents.map((c) => {
           if (c.id === carticonComp.id) {
-            return { ...c, config: { ...c.config, serverId: newCarticonId } };
+            return {
+              ...c,
+              config: { ...c.config, serverId: newCarticonId },
+            };
           }
           return c;
         });
@@ -577,20 +885,36 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
 
       if (logoComp && pendingFiles[logoComp.id]) {
         const prev = previewUrls[logoComp.id];
-        if (prev) { try { URL.revokeObjectURL(prev); } catch {} }
-        setPreviewUrls((p) => { const copy = {...p}; delete copy[logoComp.id]; return copy; });
-        setPendingFiles((p) => { const copy = {...p}; delete copy[logoComp.id]; return copy; });
+        if (prev) {
+          try {
+            URL.revokeObjectURL(prev);
+          } catch {}
+        }
+        setPreviewUrls((p) => {
+          const copy = { ...p };
+          delete copy[logoComp.id];
+          return copy;
+        });
+        setPendingFiles((p) => {
+          const copy = { ...p };
+          delete copy[logoComp.id];
+          return copy;
+        });
       }
 
-      const snapshotObj = { 
-        siteId, 
-        slug: getFullSlug(slug), // ✅ FULL SLUG WITH BASE
-        components: updatedComponents.map((c: any) => ({ type: c.type, position: c.position, config: c.config })), 
-        color: navbarColor, 
-        theme, 
-        style: navbarStyle, 
-        version: 1, 
-        published: false 
+      const snapshotObj = {
+        siteId,
+        slug: getFullSlug(slug),
+        components: updatedComponents.map((c: any) => ({
+          type: c.type,
+          position: c.position,
+          config: c.config,
+        })),
+        color: navbarColor,
+        theme,
+        style: navbarStyle,
+        version: 1,
+        published: false,
       };
       const snapshot = JSON.stringify(snapshotObj);
       setSavedConfigId(savedConfig.id ?? null);
@@ -599,19 +923,23 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
 
       try {
         localStorage.setItem(`navbar_saved_${siteId}`, snapshot);
-        localStorage.setItem('navbar_last_saved_siteId', siteId);
+        localStorage.setItem("navbar_last_saved_siteId", siteId);
       } catch (e) {
-        console.warn('Unable to write saved navbar to localStorage', e);
+        console.warn("Unable to write saved navbar to localStorage", e);
       }
 
-      setSnackbarMessage(`Navbar saved successfully with full slug: ${getFullSlug(slug)}`);
+      setSnackbarMessage(
+        `Navbar saved successfully with full slug: ${getFullSlug(slug)}`
+      );
       setSnackbarSeverity("success");
       setSnackbarOpen(true);
 
       return savedConfig;
     } catch (err: any) {
       console.error("saveNavbarConfig error:", err);
-      setSnackbarMessage(`Error saving: ${err.message}. Please check server connection.`);
+      setSnackbarMessage(
+        `Error saving: ${err.message}. Please check server connection.`
+      );
       setSnackbarSeverity("error");
       setSnackbarOpen(true);
       return null;
@@ -631,7 +959,11 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
       if (setSavedNavbarConfig) {
         setSavedNavbarConfig(exportData as NavbarConfig);
       }
-      setSnackbarMessage(`Navbar Published successfully with slug: ${getFullSlug(slug)}! You can now view it in Your Layout page.`);
+      setSnackbarMessage(
+        `Navbar Published successfully with slug: ${getFullSlug(
+          slug
+        )}! You can now view it in Your Layout page.`
+      );
       setSnackbarSeverity("success");
       setSnackbarOpen(true);
     } catch (e: any) {
@@ -645,41 +977,66 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
     setResettingNavbar(true);
     const logoIds: number[] = components
       .map((c: any) => c?.config?.serverId)
-      .filter((id): id is number => typeof id === "number" && id !== undefined);
+      .filter(
+        (id): id is number => typeof id === "number" && id !== undefined
+      );
     const carticonIds: string[] = components
-      .filter(c => c.type === "cartIcon")
+      .filter((c) => c.type === "cartIcon")
       .map((c: any) => c?.config?.serverId)
-      .filter((id): id is string => typeof id === "string" && id !== undefined);
+      .filter(
+        (id): id is string => typeof id === "string" && id !== undefined
+      );
 
     try {
       if (savedConfigId && !isOffline) {
-        const deleteConfigRes = await withRetry(() => fetch(`${BASE_URL}/custom-navbar-config/delete/${savedConfigId}`, {
-          method: "DELETE",
-          mode: "cors",
-          headers: { Accept: "application/json" },
-        }));
+        const deleteConfigRes = await withRetry(() =>
+          fetch(`${BASE_URL}/custom-navbar-config/delete/${savedConfigId}`, {
+            method: "DELETE",
+            mode: "cors",
+            headers: { Accept: "application/json" },
+          })
+        );
         if (!deleteConfigRes.ok) {
-          const txt = await deleteConfigRes.text().catch(() => deleteConfigRes.statusText || "");
-          throw new Error(`Config delete failed ${deleteConfigRes.status}: ${txt}`);
+          const txt = await deleteConfigRes
+            .text()
+            .catch(() => deleteConfigRes.statusText || "");
+          throw new Error(
+            `Config delete failed ${deleteConfigRes.status}: ${txt}`
+          );
         }
       }
 
       if (!isOffline) {
         if (logoIds.length > 0) {
           await bulkDeleteLogoIds(logoIds).catch(async (bulkErr) => {
-            console.warn("bulk delete failed, trying individual deletes", bulkErr);
+            console.warn(
+              "bulk delete failed, trying individual deletes",
+              bulkErr
+            );
             for (const id of logoIds) {
-              try { await deleteSingleLogoOnServer(id); } catch (e) { console.error(`Failed to delete logo ${id}:`, e); }
+              try {
+                await deleteSingleLogoOnServer(id);
+              } catch (e) {
+                console.error(`Failed to delete logo ${id}:`, e);
+              }
             }
           });
         }
         for (const id of carticonIds) {
-          try { await deleteCarticonOnServer(id); } catch (e) { console.error(`Failed to delete carticon ${id}:`, e); }
+          try {
+            await deleteCarticonOnServer(id);
+          } catch (e) {
+            console.error(`Failed to delete carticon ${id}:`, e);
+          }
         }
       }
 
       // Local reset
-      Object.values(previewUrlsRef.current).forEach((u) => { try { URL.revokeObjectURL(u); } catch {} });
+      Object.values(previewUrlsRef.current).forEach((u) => {
+        try {
+          URL.revokeObjectURL(u);
+        } catch {}
+      });
       setPreviewUrls({});
       setPendingFiles({});
       setComponents([]);
@@ -695,18 +1052,25 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
       setSavedConfigHash(null);
 
       if (setSavedNavbarConfig) {
-        setSavedNavbarConfig({ siteId: "", components: [], color: "#1976d2", theme: "light", version: 1, published: false } as NavbarConfig);
+        setSavedNavbarConfig({
+          siteId: "",
+          components: [],
+          color: "#1976d2",
+          theme: "light",
+          version: 1,
+          published: false,
+        } as NavbarConfig);
       }
 
       try {
-        const last = localStorage.getItem('navbar_last_saved_siteId');
+        const last = localStorage.getItem("navbar_last_saved_siteId");
         if (last) {
           localStorage.removeItem(`navbar_saved_${last}`);
-          localStorage.removeItem('navbar_last_saved_siteId');
+          localStorage.removeItem("navbar_last_saved_siteId");
         }
-        localStorage.removeItem('yourLayout_navbar_config');
+        localStorage.removeItem("yourLayout_navbar_config");
       } catch (e) {
-        console.warn('Unable to remove saved navbar from localStorage', e);
+        console.warn("Unable to remove saved navbar from localStorage", e);
       }
 
       setSnackbarMessage("Navbar reset successfully!");
@@ -715,7 +1079,11 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
     } catch (err: any) {
       console.error("Reset failed:", err);
       // Fallback to local reset on error
-      Object.values(previewUrlsRef.current).forEach((u) => { try { URL.revokeObjectURL(u); } catch {} });
+      Object.values(previewUrlsRef.current).forEach((u) => {
+        try {
+          URL.revokeObjectURL(u);
+        } catch {}
+      });
       setPreviewUrls({});
       setPendingFiles({});
       setComponents([]);
@@ -730,9 +1098,18 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
       setSavedConfigId(null);
       setSavedConfigHash(null);
       if (setSavedNavbarConfig) {
-        setSavedNavbarConfig({ siteId: "", components: [], color: "#1976d2", theme: "light", version: 1, published: false } as NavbarConfig);
+        setSavedNavbarConfig({
+          siteId: "",
+          components: [],
+          color: "#1976d2",
+          theme: "light",
+          version: 1,
+          published: false,
+        } as NavbarConfig);
       }
-      setSnackbarMessage(`Reset failed: ${err.message}. Reset performed locally.`);
+      setSnackbarMessage(
+        `Reset failed: ${err.message}. Reset performed locally.`
+      );
       setSnackbarSeverity("warning");
       setSnackbarOpen(true);
     } finally {
@@ -740,16 +1117,21 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
     }
   };
 
+  // isSaved flag recompute
   useEffect(() => {
-    const currentHash = JSON.stringify({ 
-      siteId, 
-      slug: getFullSlug(slug), // ✅ FULL SLUG WITH BASE
-      components: displayComponents.map((c: any) => ({ type: c.type, position: c.position, config: c.config })), 
-      color: navbarColor, 
-      theme, 
-      style: navbarStyle, 
-      version: 1, 
-      published: false 
+    const currentHash = JSON.stringify({
+      siteId,
+      slug: getFullSlug(slug),
+      components: displayComponents.map((c: any) => ({
+        type: c.type,
+        position: c.position,
+        config: c.config,
+      })),
+      color: navbarColor,
+      theme,
+      style: navbarStyle,
+      version: 1,
+      published: false,
     });
     if (savedConfigHash && currentHash === savedConfigHash) {
       setIsSaved(true);
@@ -759,43 +1141,66 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
   }, [components, siteId, slug, navbarColor, theme, navbarStyle, pendingFiles]);
 
   const getNavbarWrapperStyles = (style: NavbarStyle) => {
-    const base: any = { backgroundColor: "transparent", padding: 0, width: "100%", boxSizing: "border-box" };
+    const base: any = {
+      backgroundColor: "transparent",
+      padding: 0,
+      width: "100%",
+      boxSizing: "border-box",
+    };
     switch (style) {
       case "round":
-        return { ...base, borderRadius: '16px', overflow: 'hidden', display: 'block' };
+        return {
+          ...base,
+          borderRadius: "16px",
+          overflow: "hidden",
+          display: "block",
+        };
       case "square":
-        return { ...base, borderRadius: '0px', overflow: 'hidden', display: 'block' };
+        return {
+          ...base,
+          borderRadius: "0px",
+          overflow: "hidden",
+          display: "block",
+        };
       case "none":
       default:
-        return { ...base, borderRadius: '0px', margin: '0', overflow: 'hidden', display: 'block' };
+        return {
+          ...base,
+          borderRadius: "0px",
+          margin: "0",
+          overflow: "hidden",
+          display: "block",
+        };
     }
   };
 
   return (
-    <Box sx={{ 
-      p: 4, 
-      minHeight: '100vh',
-      background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
-    }}>
+    <Box
+      sx={{
+        p: 4,
+        minHeight: "100vh",
+        background: "linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)",
+      }}
+    >
       {/* Header */}
       <Box sx={{ mb: 4 }}>
-        <Typography 
-          variant="h4" 
-          sx={{ 
+        <Typography
+          variant="h4"
+          sx={{
             fontWeight: 700,
-            color: '#2c3e50',
+            color: "#2c3e50",
             mb: 1,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1
+            display: "flex",
+            alignItems: "center",
+            gap: 1,
           }}
         >
           Navbar Builder
           {isSaved && (
-            <Chip 
-              label="Saved" 
-              size="small" 
-              color="success" 
+            <Chip
+              label="Saved"
+              size="small"
+              color="success"
               sx={{ fontWeight: 600 }}
             />
           )}
@@ -803,15 +1208,16 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
         <Typography variant="body2" color="text.secondary">
           Design and customize your navigation bar with slug support
         </Typography>
-        
+
         {/* Base Slug Info */}
         {baseSlug && (
           <Alert severity="info" sx={{ mt: 2, borderRadius: 2 }}>
             <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-              🎯 Base Website Slug: {baseSlug}
+              🌐 Website URL / IP: {baseSlug}
             </Typography>
             <Typography variant="body2">
-              Your navbar will be saved under: <strong>/{baseSlug}/your-navbar-slug</strong>
+              Your navbar will be saved under:{" "}
+              <strong>{getFullSlug("your-navbar-slug")}</strong>
             </Typography>
           </Alert>
         )}
@@ -820,48 +1226,71 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
       {/* Configuration Section */}
       <Card sx={{ mb: 3, boxShadow: 3 }}>
         <CardContent sx={{ p: 3 }}>
-          <Typography variant="h6" sx={{ mb: 2.5, fontWeight: 600, color: '#34495e' }}>
+          <Typography
+            variant="h6"
+            sx={{ mb: 2.5, fontWeight: 600, color: "#34495e" }}
+          >
             Configuration
           </Typography>
-          
+
           <Grid container spacing={2.5}>
-            <Grid  >
+            <Grid>
               <TextField
                 label="Site ID"
                 value={siteId}
-                onChange={(e) => { setSiteId(e.target.value); if (siteIdError) setSiteIdError(false); }}
-                error={siteIdError}
-                helperText={siteIdError ? "Site ID is required" : "Unique identifier for your site"}
-                fullWidth
-                required
-                size="small"
-              />
-            </Grid>
-
-            {/* ✅ SLUG FIELD WITH BASE SLUG DISPLAY */}
-            <Grid  >
-              <TextField
-                label="Navbar Slug *"
-                value={slug}
-                onChange={(e) => { 
-                  setSlug(e.target.value); 
-                  if (slugError) setSlugError(false); 
+                onChange={(e) => {
+                  setSiteId(e.target.value);
+                  if (siteIdError) setSiteIdError(false);
                 }}
-                error={slugError}
+                error={siteIdError}
                 helperText={
-                  slugError ? "Invalid slug format" : 
-                  baseSlug ? `Full URL: /${baseSlug}/${slug || 'your-slug'}` : 
-                  "URL-friendly name (e.g., header, main-nav)"
+                  siteIdError
+                    ? "Site ID is required"
+                    : "Unique identifier for your site"
                 }
                 fullWidth
                 required
                 size="small"
-                placeholder="header"
               />
             </Grid>
 
-            <Grid  >
-              <Box sx={{ display: 'flex', gap: 1.5 }}>
+            {/* ✅ SLUG FIELD WITH BASE SLUG DISPLAY AS GREY PREFIX */}
+            <Grid>
+              <TextField
+                label="Navbar Slug *"
+                value={slug}
+                onChange={(e) => {
+                  setSlug(e.target.value);
+                  if (slugError) setSlugError(false);
+                }}
+                error={slugError}
+                helperText={
+                  slugError
+                    ? "Invalid slug format"
+                    : baseSlug
+                    ? `Final URL: ${getFullSlug(slug || "your-slug")}`
+                    : "URL-friendly name (e.g., home, main-nav)"
+                }
+                fullWidth
+                required
+                size="small"
+                placeholder="home"
+                InputProps={{
+                  startAdornment:
+                    baseSlug && (
+                      <InputAdornment
+                        position="start"
+                        sx={{ color: "text.disabled" }}
+                      >
+                        {`${baseSlug}`}
+                      </InputAdornment>
+                    ),
+                }}
+              />
+            </Grid>
+
+            <Grid>
+              <Box sx={{ display: "flex", gap: 1.5 }}>
                 <FormControl fullWidth size="small" sx={{ minWidth: 250 }}>
                   <InputLabel>Add Component</InputLabel>
                   <Select
@@ -870,11 +1299,13 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
                     onChange={(e) => setSelected(e.target.value as any)}
                     disabled={loadingComponents}
                   >
-                    <MenuItem value=""><em>Select component</em></MenuItem>
+                    <MenuItem value="">
+                      <em>Select component</em>
+                    </MenuItem>
                     {availableComponents.map((c) => (
-                      <MenuItem 
-                        key={c.value} 
-                        value={c.value} 
+                      <MenuItem
+                        key={c.value}
+                        value={c.value}
                         disabled={components.some((x) => x.type === c.value)}
                       >
                         {c.label}
@@ -884,11 +1315,11 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
                 </FormControl>
                 <Tooltip title="Add component">
                   <span>
-                    <Button 
-                      variant="contained" 
-                      onClick={addComponent} 
+                    <Button
+                      variant="contained"
+                      onClick={addComponent}
                       disabled={!selected}
-                      sx={{ minWidth: 'auto', px: 2 }}
+                      sx={{ minWidth: "auto", px: 2 }}
                     >
                       <AddCircleOutlineIcon />
                     </Button>
@@ -897,28 +1328,28 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
               </Box>
             </Grid>
 
-            <Grid  >
-              <Button 
-                variant="outlined" 
+            <Grid>
+              <Button
+                variant="outlined"
                 startIcon={<ColorLensIcon />}
-                onClick={() => { 
-                  setPrevColor(navbarColor); 
-                  setTempColor(navbarColor); 
-                  setColorPickerOpen(true); 
+                onClick={() => {
+                  setPrevColor(navbarColor);
+                  setTempColor(navbarColor);
+                  setColorPickerOpen(true);
                 }}
                 size="small"
                 fullWidth
-                sx={{ height: '40px' }}
+                sx={{ height: "40px" }}
               >
                 Choose Color
               </Button>
             </Grid>
 
-            <Grid  >
+            <Grid>
               <FormControl fullWidth size="small">
                 <InputLabel>Navbar Style</InputLabel>
-                <Select 
-                  value={navbarStyle} 
+                <Select
+                  value={navbarStyle}
                   label="Navbar Style"
                   onChange={(e) => setNavbarStyle(e.target.value as NavbarStyle)}
                 >
@@ -937,53 +1368,77 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
       {/* Components Section */}
       <Card sx={{ mb: 3, boxShadow: 3 }}>
         <CardContent sx={{ p: 3 }}>
-          <Typography variant="h6" sx={{ mb: 2.5, fontWeight: 600, color: '#34495e' }}>
+          <Typography
+            variant="h6"
+            sx={{ mb: 2.5, fontWeight: 600, color: "#34495e" }}
+          >
             Components ({displayComponents.length})
           </Typography>
-          
+
           {displayComponents.length === 0 ? (
-            <Box sx={{ 
-              p: 4, 
-              textAlign: 'center',
-              backgroundColor: '#f8f9fa',
-              borderRadius: 2,
-              border: '2px dashed',
-              borderColor: 'divider'
-            }}>
+            <Box
+              sx={{
+                p: 4,
+                textAlign: "center",
+                backgroundColor: "#f8f9fa",
+                borderRadius: 2,
+                border: "2px dashed",
+                borderColor: "divider",
+              }}
+            >
               <Typography color="text.secondary">
                 No components added yet. Select a component above to get started.
               </Typography>
             </Box>
           ) : (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {displayComponents.map((comp, index) => (
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              {displayComponents.map((comp) => (
                 <Fade in key={comp.id} timeout={300}>
-                  <Card 
-                    variant="outlined" 
-                    sx={{ 
+                  <Card
+                    variant="outlined"
+                    sx={{
                       borderLeft: 4,
-                      borderLeftColor: comp.position === 'left' ? '#3498db' : comp.position === 'center' ? '#2ecc71' : '#e74c3c',
-                      '&:hover': {
+                      borderLeftColor:
+                        comp.position === "left"
+                          ? "#3498db"
+                          : comp.position === "center"
+                          ? "#2ecc71"
+                          : "#e74c3c",
+                      "&:hover": {
                         boxShadow: 2,
-                        transform: 'translateY(-2px)',
-                        transition: 'all 0.2s'
-                      }
+                        transform: "translateY(-2px)",
+                        transition: "all 0.2s",
+                      },
                     }}
                   >
                     <CardContent>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                          <Chip 
-                            label={comp.type} 
-                            size="small" 
+                      <Box
+                        sx={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          mb: 2,
+                        }}
+                      >
+                        <Box
+                          sx={{ display: "flex", alignItems: "center", gap: 2 }}
+                        >
+                          <Chip
+                            label={comp.type}
+                            size="small"
                             sx={{ fontWeight: 600 }}
                           />
                           <FormControl size="small" sx={{ minWidth: 120 }}>
                             <InputLabel>Position</InputLabel>
-                            <Select 
-                              value={comp.position} 
+                            <Select
+                              value={comp.position}
                               label="Position"
-                              onChange={(e) => handlePositionChange(comp.id, e.target.value as Position)}
+                              onChange={(e) =>
+                                handlePositionChange(
+                                  comp.id,
+                                  e.target.value as Position
+                                )
+                              }
                             >
                               <MenuItem value="left">Left</MenuItem>
                               <MenuItem value="center">Center</MenuItem>
@@ -991,10 +1446,10 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
                             </Select>
                           </FormControl>
                         </Box>
-                        
+
                         <Tooltip title="Remove component">
-                          <IconButton 
-                            color="error" 
+                          <IconButton
+                            color="error"
                             onClick={() => removeComponent(comp.id)}
                             size="small"
                           >
@@ -1007,65 +1462,127 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
                       <Box sx={{ mt: 2 }}>
                         {comp.type === "logo" && (
                           <Grid container spacing={2}>
-                            <Grid  >
+                            <Grid>
                               <TextField
                                 label="Image URL"
                                 fullWidth
                                 size="small"
                                 value={comp.config?.src || ""}
-                                onChange={(e) => updateComponent(comp.id, { 
-                                  config: { ...comp.config, src: e.target.value, serverId: undefined, logoId: undefined } 
-                                })}
+                                onChange={(e) =>
+                                  updateComponent(comp.id, {
+                                    config: {
+                                      ...comp.config,
+                                      src: e.target.value,
+                                      serverId: undefined,
+                                      logoId: undefined,
+                                    },
+                                  })
+                                }
                                 placeholder="https://example.com/logo.png"
                               />
                             </Grid>
-                            <Grid  >
-                              <Button 
-                                variant="outlined" 
-                                component="label" 
+                            <Grid>
+                              <Button
+                                variant="outlined"
+                                component="label"
                                 fullWidth
                                 size="small"
                               >
                                 Upload Image
-                                <input 
-                                  type="file" 
-                                  hidden 
-                                  accept="image/*" 
-                                  onChange={(e) => { 
-                                    const f = e.target.files?.[0]; 
-                                    if (f) handleFileSelectLocal(comp.id, f); 
-                                  }} 
+                                <input
+                                  type="file"
+                                  hidden
+                                  accept="image/*"
+                                  onChange={(e) => {
+                                    const f = e.target.files?.[0];
+                                    if (f) handleFileSelectLocal(comp.id, f);
+                                  }}
                                 />
                               </Button>
                             </Grid>
-                            <Grid  >
+                            <Grid>
                               <TextField
                                 label="Alt Text"
                                 fullWidth
                                 size="small"
                                 value={comp.config?.alt || ""}
-                                onChange={(e) => updateComponent(comp.id, { 
-                                  config: { ...comp.config, alt: e.target.value } 
-                                })}
+                                onChange={(e) =>
+                                  updateComponent(comp.id, {
+                                    config: { ...comp.config, alt: e.target.value },
+                                  })
+                                }
                               />
                             </Grid>
+
+                            {/* ✅ Height & Width for Logo */}
+                            <Grid>
+                              <TextField
+                                label="Height (px)"
+                                type="number"
+                                fullWidth
+                                size="small"
+                                value={
+                                  comp.config?.height !== undefined
+                                    ? comp.config.height
+                                    : ""
+                                }
+                                onChange={(e) =>
+                                  updateComponent(comp.id, {
+                                    config: {
+                                      ...comp.config,
+                                      height:
+                                        e.target.value === ""
+                                          ? undefined
+                                          : Number(e.target.value),
+                                    },
+                                  })
+                                }
+                              />
+                            </Grid>
+                            <Grid>
+                              <TextField
+                                label="Width (px)"
+                                type="number"
+                                fullWidth
+                                size="small"
+                                value={
+                                  comp.config?.width !== undefined
+                                    ? comp.config.width
+                                    : ""
+                                }
+                                onChange={(e) =>
+                                  updateComponent(comp.id, {
+                                    config: {
+                                      ...comp.config,
+                                      width:
+                                        e.target.value === ""
+                                          ? undefined
+                                          : Number(e.target.value),
+                                    },
+                                  })
+                                }
+                              />
+                            </Grid>
+
                             {comp.config?.src && (
-                              <Grid  >
-                                <Box sx={{ 
-                                  p: 2, 
-                                  backgroundColor: '#f8f9fa', 
-                                  borderRadius: 1,
-                                  display: 'flex',
-                                  justifyContent: 'center'
-                                }}>
-                                  <img 
-                                    src={comp.config.src} 
-                                    alt="logo-preview" 
-                                    style={{ 
-                                      maxHeight: 60, 
-                                      maxWidth: '100%', 
-                                      objectFit: 'contain' 
-                                    }} 
+                              <Grid>
+                                <Box
+                                  sx={{
+                                    p: 2,
+                                    backgroundColor: "#f8f9fa",
+                                    borderRadius: 1,
+                                    display: "flex",
+                                    justifyContent: "center",
+                                  }}
+                                >
+                                  <img
+                                    src={comp.config.src}
+                                    alt="logo-preview"
+                                    style={{
+                                      maxHeight: 60,
+                                      maxWidth: "100%",
+                                      objectFit: "contain",
+                                    }}
                                   />
                                 </Box>
                               </Grid>
@@ -1075,44 +1592,62 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
 
                         {comp.type === "menuLinks" && (
                           <Box>
-                            {(comp.config?.links || []).map((l: any, idx: number) => (
-                              <Box 
-                                key={l.id} 
-                                sx={{ 
-                                  display: 'flex', 
-                                  gap: 1.5, 
-                                  mb: 1.5,
-                                  p: 1.5,
-                                  backgroundColor: '#f8f9fa',
-                                  borderRadius: 1
-                                }}
-                              >
-                                <TextField
-                                  label="Label"
-                                  value={l.label}
-                                  size="small"
-                                  sx={{ flex: 1 }}
-                                  onChange={(e) => updateMenuLink(comp.id, l.id, "label", e.target.value)}
-                                />
-                                <TextField
-                                  label="Path"
-                                  value={l.path}
-                                  size="small"
-                                  sx={{ flex: 1 }}
-                                  onChange={(e) => updateMenuLink(comp.id, l.id, "path", e.target.value)}
-                                />
-                                <IconButton 
-                                  onClick={() => removeMenuLink(comp.id, l.id)}
-                                  color="error"
-                                  size="small"
+                            {(comp.config?.links || []).map(
+                              (l: any, idx: number) => (
+                                <Box
+                                  key={l.id}
+                                  sx={{
+                                    display: "flex",
+                                    gap: 1.5,
+                                    mb: 1.5,
+                                    p: 1.5,
+                                    backgroundColor: "#f8f9fa",
+                                    borderRadius: 1,
+                                  }}
                                 >
-                                  <DeleteIcon fontSize="small" />
-                                </IconButton>
-                              </Box>
-                            ))}
+                                  <TextField
+                                    label="Label"
+                                    value={l.label}
+                                    size="small"
+                                    sx={{ flex: 1 }}
+                                    onChange={(e) =>
+                                      updateMenuLink(
+                                        comp.id,
+                                        l.id,
+                                        "label",
+                                        e.target.value
+                                      )
+                                    }
+                                  />
+                                  <TextField
+                                    label="Path"
+                                    value={l.path}
+                                    size="small"
+                                    sx={{ flex: 1 }}
+                                    onChange={(e) =>
+                                      updateMenuLink(
+                                        comp.id,
+                                        l.id,
+                                        "path",
+                                        e.target.value
+                                      )
+                                    }
+                                  />
+                                  <IconButton
+                                    onClick={() =>
+                                      removeMenuLink(comp.id, l.id)
+                                    }
+                                    color="error"
+                                    size="small"
+                                  >
+                                    <DeleteIcon fontSize="small" />
+                                  </IconButton>
+                                </Box>
+                              )
+                            )}
 
-                            <Button 
-                              onClick={() => addMenuLink(comp.id)} 
+                            <Button
+                              onClick={() => addMenuLink(comp.id)}
                               variant="outlined"
                               size="small"
                               fullWidth
@@ -1124,64 +1659,121 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
 
                         {comp.type === "banner" && (
                           <Grid container spacing={2}>
-                            <Grid  >
+                            <Grid>
                               <TextField
                                 label="Banner URL"
                                 fullWidth
                                 size="small"
                                 value={comp.config?.src || ""}
-                                onChange={(e) => updateComponent(comp.id, { 
-                                  config: { ...comp.config, src: e.target.value } 
-                                })}
+                                onChange={(e) =>
+                                  updateComponent(comp.id, {
+                                    config: { ...comp.config, src: e.target.value },
+                                  })
+                                }
                               />
                             </Grid>
-                            <Grid  >
-                              <Button 
-                                variant="outlined" 
-                                component="label" 
+                            <Grid>
+                              <Button
+                                variant="outlined"
+                                component="label"
                                 fullWidth
                                 size="small"
                               >
                                 Upload Image
-                                <input 
-                                  type="file" 
-                                  hidden 
-                                  accept="image/*" 
-                                  onChange={(e) => { 
-                                    const f = e.target.files?.[0]; 
-                                    if (f) handleFileSelectLocal(comp.id, f); 
-                                  }} 
+                                <input
+                                  type="file"
+                                  hidden
+                                  accept="image/*"
+                                  onChange={(e) => {
+                                    const f = e.target.files?.[0];
+                                    if (f) handleFileSelectLocal(comp.id, f);
+                                  }}
                                 />
                               </Button>
                             </Grid>
-                            <Grid  >
+                            <Grid>
                               <TextField
                                 label="Alt Text"
                                 fullWidth
                                 size="small"
                                 value={comp.config?.alt || ""}
-                                onChange={(e) => updateComponent(comp.id, { 
-                                  config: { ...comp.config, alt: e.target.value } 
-                                })}
+                                onChange={(e) =>
+                                  updateComponent(comp.id, {
+                                    config: { ...comp.config, alt: e.target.value },
+                                  })
+                                }
                               />
                             </Grid>
+
+                            {/* ✅ Height & Width for Banner */}
+                            <Grid>
+                              <TextField
+                                label="Height (px)"
+                                type="number"
+                                fullWidth
+                                size="small"
+                                value={
+                                  comp.config?.height !== undefined
+                                    ? comp.config.height
+                                    : ""
+                                }
+                                onChange={(e) =>
+                                  updateComponent(comp.id, {
+                                    config: {
+                                      ...comp.config,
+                                      height:
+                                        e.target.value === ""
+                                          ? undefined
+                                          : Number(e.target.value),
+                                    },
+                                  })
+                                }
+                              />
+                            </Grid>
+                            <Grid>
+                              <TextField
+                                label="Width (px)"
+                                type="number"
+                                fullWidth
+                                size="small"
+                                value={
+                                  comp.config?.width !== undefined
+                                    ? comp.config.width
+                                    : ""
+                                }
+                                onChange={(e) =>
+                                  updateComponent(comp.id, {
+                                    config: {
+                                      ...comp.config,
+                                      width:
+                                        e.target.value === ""
+                                          ? undefined
+                                          : Number(e.target.value),
+                                    },
+                                  })
+                                }
+                              />
+                            </Grid>
+
                             {comp.config?.src && (
-                              <Grid  >
-                                <Box sx={{ 
-                                  p: 2, 
-                                  backgroundColor: '#f8f9fa', 
-                                  borderRadius: 1,
-                                  display: 'flex',
-                                  justifyContent: 'center'
-                                }}>
-                                  <img 
-                                    src={comp.config.src} 
-                                    alt="banner-preview" 
-                                    style={{ 
-                                      maxHeight: 60, 
-                                      maxWidth: '100%', 
-                                      objectFit: 'contain' 
-                                    }} 
+                              <Grid>
+                                <Box
+                                  sx={{
+                                    p: 2,
+                                    backgroundColor: "#f8f9fa",
+                                    borderRadius: 1,
+                                    display: "flex",
+                                    justifyContent: "center",
+                                  }}
+                                >
+                                  <img
+                                    src={comp.config.src}
+                                    alt="banner-preview"
+                                    style={{
+                                      maxHeight: 60,
+                                      maxWidth: "100%",
+                                      objectFit: "contain",
+                                    }}
                                   />
                                 </Box>
                               </Grid>
@@ -1191,65 +1783,125 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
 
                         {comp.type === "profileIcon" && (
                           <Grid container spacing={2}>
-                            <Grid  >
+                            <Grid>
                               <TextField
                                 label="Avatar URL"
                                 fullWidth
                                 size="small"
                                 value={comp.config?.src || ""}
-                                onChange={(e) => updateComponent(comp.id, { 
-                                  config: { ...comp.config, src: e.target.value } 
-                                })}
+                                onChange={(e) =>
+                                  updateComponent(comp.id, {
+                                    config: { ...comp.config, src: e.target.value },
+                                  })
+                                }
                               />
                             </Grid>
-                            <Grid  >
-                              <Button 
-                                variant="outlined" 
-                                component="label" 
+                            <Grid>
+                              <Button
+                                variant="outlined"
+                                component="label"
                                 fullWidth
                                 size="small"
                               >
                                 Upload Image
-                                <input 
-                                  type="file" 
-                                  hidden 
-                                  accept="image/*" 
-                                  onChange={(e) => { 
-                                    const f = e.target.files?.[0]; 
-                                    if (f) handleFileSelectLocal(comp.id, f); 
-                                  }} 
+                                <input
+                                  type="file"
+                                  hidden
+                                  accept="image/*"
+                                  onChange={(e) => {
+                                    const f = e.target.files?.[0];
+                                    if (f) handleFileSelectLocal(comp.id, f);
+                                  }}
                                 />
                               </Button>
                             </Grid>
-                            <Grid  >
+                            <Grid>
                               <TextField
                                 label="Initials"
                                 fullWidth
                                 size="small"
                                 value={comp.config?.initials || ""}
-                                onChange={(e) => updateComponent(comp.id, { 
-                                  config: { ...comp.config, initials: e.target.value } 
-                                })}
+                                onChange={(e) =>
+                                  updateComponent(comp.id, {
+                                    config: {
+                                      ...comp.config,
+                                      initials: e.target.value,
+                                    },
+                                  })
+                                }
                               />
                             </Grid>
+
+                            {/* ✅ Height & Width for Profile Icon */}
+                            <Grid>
+                              <TextField
+                                label="Height (px)"
+                                type="number"
+                                fullWidth
+                                size="small"
+                                value={
+                                  comp.config?.height !== undefined
+                                    ? comp.config.height
+                                    : ""
+                                }
+                                onChange={(e) =>
+                                  updateComponent(comp.id, {
+                                    config: {
+                                      ...comp.config,
+                                      height:
+                                        e.target.value === ""
+                                          ? undefined
+                                          : Number(e.target.value),
+                                    },
+                                  })
+                                }
+                              />
+                            </Grid>
+                            <Grid>
+                              <TextField
+                                label="Width (px)"
+                                type="number"
+                                fullWidth
+                                size="small"
+                                value={
+                                  comp.config?.width !== undefined
+                                    ? comp.config.width
+                                    : ""
+                                }
+                                onChange={(e) =>
+                                  updateComponent(comp.id, {
+                                    config: {
+                                      ...comp.config,
+                                      width:
+                                        e.target.value === ""
+                                          ? undefined
+                                          : Number(e.target.value),
+                                    },
+                                  })
+                                }
+                              />
+                            </Grid>
+
                             {comp.config?.src && (
-                              <Grid  >
-                                <Box sx={{ 
-                                  p: 2, 
-                                  backgroundColor: '#f8f9fa', 
-                                  borderRadius: 1,
-                                  display: 'flex',
-                                  justifyContent: 'center'
-                                }}>
-                                  <img 
-                                    src={comp.config.src} 
-                                    alt="avatar-preview" 
-                                    style={{ 
-                                      maxHeight: 60, 
-                                      maxWidth: 60, 
-                                      objectFit: 'cover',
-                                      borderRadius: '50%'
-                                    }} 
+                              <Grid>
+                                <Box
+                                  sx={{
+                                    p: 2,
+                                    backgroundColor: "#f8f9fa",
+                                    borderRadius: 1,
+                                    display: "flex",
+                                    justifyContent: "center",
+                                  }}
+                                >
+                                  <img
+                                    src={comp.config.src}
+                                    alt="avatar-preview"
+                                    style={{
+                                      maxHeight: 60,
+                                      maxWidth: 60,
+                                      objectFit: "cover",
+                                      borderRadius: "50%",
+                                    }}
                                   />
                                 </Box>
                               </Grid>
@@ -1259,26 +1911,30 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
 
                         {comp.type === "title" && (
                           <Grid container spacing={2}>
-                            <Grid  >
+                            <Grid>
                               <TextField
                                 label="Title Text"
                                 fullWidth
                                 size="small"
                                 value={comp.config?.text || ""}
-                                onChange={(e) => updateComponent(comp.id, { 
-                                  config: { ...comp.config, text: e.target.value } 
-                                })}
+                                onChange={(e) =>
+                                  updateComponent(comp.id, {
+                                    config: { ...comp.config, text: e.target.value },
+                                  })
+                                }
                               />
                             </Grid>
-                            <Grid  >
+                            <Grid>
                               <TextField
                                 label="Link URL"
                                 fullWidth
                                 size="small"
                                 value={comp.config?.link || ""}
-                                onChange={(e) => updateComponent(comp.id, { 
-                                  config: { ...comp.config, link: e.target.value } 
-                                })}
+                                onChange={(e) =>
+                                  updateComponent(comp.id, {
+                                    config: { ...comp.config, link: e.target.value },
+                                  })
+                                }
                                 placeholder="/"
                               />
                             </Grid>
@@ -1287,26 +1943,30 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
 
                         {comp.type === "ctaButton" && (
                           <Grid container spacing={2}>
-                            <Grid  >
+                            <Grid>
                               <TextField
                                 label="Button Text"
                                 fullWidth
                                 size="small"
                                 value={comp.config?.text || ""}
-                                onChange={(e) => updateComponent(comp.id, { 
-                                  config: { ...comp.config, text: e.target.value } 
-                                })}
+                                onChange={(e) =>
+                                  updateComponent(comp.id, {
+                                    config: { ...comp.config, text: e.target.value },
+                                  })
+                                }
                               />
                             </Grid>
-                            <Grid  >
+                            <Grid>
                               <TextField
                                 label="URL"
                                 fullWidth
                                 size="small"
                                 value={comp.config?.url || ""}
-                                onChange={(e) => updateComponent(comp.id, { 
-                                  config: { ...comp.config, url: e.target.value } 
-                                })}
+                                onChange={(e) =>
+                                  updateComponent(comp.id, {
+                                    config: { ...comp.config, url: e.target.value },
+                                  })
+                                }
                               />
                             </Grid>
                           </Grid>
@@ -1318,34 +1978,49 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
                             fullWidth
                             size="small"
                             value={comp.config?.placeholder || ""}
-                            onChange={(e) => updateComponent(comp.id, { 
-                              config: { ...comp.config, placeholder: e.target.value } 
-                            })}
+                            onChange={(e) =>
+                              updateComponent(comp.id, {
+                                config: {
+                                  ...comp.config,
+                                  placeholder: e.target.value,
+                                },
+                              })
+                            }
                           />
                         )}
 
                         {comp.type === "cartIcon" && (
                           <Grid container spacing={2}>
-                            <Grid  >
+                            <Grid>
                               <TextField
                                 label="Badge Count"
                                 fullWidth
                                 size="small"
                                 type="number"
                                 value={comp.config?.badge || 0}
-                                onChange={(e) => updateComponent(comp.id, { 
-                                  config: { ...comp.config, badge: Number(e.target.value) } 
-                                })}
+                                onChange={(e) =>
+                                  updateComponent(comp.id, {
+                                    config: {
+                                      ...comp.config,
+                                      badge: Number(e.target.value),
+                                    },
+                                  })
+                                }
                               />
                             </Grid>
-                            <Grid  >
+                            <Grid>
                               <FormControlLabel
                                 control={
                                   <Checkbox
                                     checked={comp.config?.showTotal || false}
-                                    onChange={(e) => updateComponent(comp.id, { 
-                                      config: { ...comp.config, showTotal: e.target.checked } 
-                                    })}
+                                    onChange={(e) =>
+                                      updateComponent(comp.id, {
+                                        config: {
+                                          ...comp.config,
+                                          showTotal: e.target.checked,
+                                        },
+                                      })
+                                    }
                                   />
                                 }
                                 label="Show Total"
@@ -1366,32 +2041,42 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
       {/* Live Preview Section */}
       <Card sx={{ mb: 3, boxShadow: 3 }}>
         <CardContent sx={{ p: 3 }}>
-          <Typography variant="h6" sx={{ mb: 2.5, fontWeight: 600, color: '#34495e' }}>
-            Live Preview {slug && `- Full Slug: /${baseSlug}/${slug}`}
+          <Typography
+            variant="h6"
+            sx={{ mb: 2.5, fontWeight: 600, color: "#34495e" }}
+          >
+            Live Preview {slug && `- Full URL: ${getFullSlug(slug)}`}
           </Typography>
-          
+
           <Box
             sx={{
-              border: '2px solid',
-              borderColor: 'divider',
+              border: "2px solid",
+              borderColor: "divider",
               borderRadius: 2,
-              overflow: 'hidden',
-              backgroundColor: '#fff',
-              transition: 'all 0.3s ease-in-out',
+              overflow: "hidden",
+              backgroundColor: "#fff",
+              transition: "all 0.3s ease-in-out",
               ...getNavbarWrapperStyles(navbarStyle),
             }}
           >
             <NavRenderer
-              key={JSON.stringify(displayComponents.map(c => ({id: c.id, pos: c.position})) + navbarStyle + navbarColor)}
-              config={{ 
-                siteId, 
-                components: displayComponents, 
-                version: 1, 
-                published: false, 
-                theme, 
-                color: navbarColor, 
-                style: navbarStyle 
-              } as ConfigWithStyle}
+              key={JSON.stringify(
+                displayComponents.map((c) => ({
+                  id: c.id,
+                  pos: c.position,
+                })) + navbarStyle + navbarColor
+              )}
+              config={
+                {
+                  siteId,
+                  components: displayComponents,
+                  version: 1,
+                  published: false,
+                  theme,
+                  color: navbarColor,
+                  style: navbarStyle,
+                } as ConfigWithStyle
+              }
               onThemeToggle={() => {}}
             />
           </Box>
@@ -1402,49 +2087,68 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
       <Card sx={{ boxShadow: 3 }}>
         <CardContent>
           <Grid container spacing={2}>
-            <Grid  >
-              <Button 
-                variant="contained" 
-                onClick={saveNavbarConfig} 
+            <Grid>
+              <Button
+                variant="contained"
+                onClick={saveNavbarConfig}
                 disabled={resettingNavbar || isSaving}
                 fullWidth
                 startIcon={<SaveIcon />}
-                sx={{ 
+                sx={{
                   py: 1.5,
                   fontWeight: 600,
                   boxShadow: 2,
-                  '&:hover': { boxShadow: 4 }
+                  "&:hover": { boxShadow: 4 },
                 }}
               >
                 {isSaving ? "Saving..." : "Save Navbar"}
               </Button>
             </Grid>
 
-            <Grid  >
-              <Button 
-                variant="contained" 
+            <Grid>
+              <Button
+                variant="contained"
                 color="secondary"
-                onClick={handleExportNavbar} 
+                onClick={handleExportNavbar}
                 disabled={resettingNavbar || isSaving}
                 fullWidth
                 startIcon={<VisibilityIcon />}
-                sx={{ 
+                sx={{
                   py: 1.5,
                   fontWeight: 600,
                   boxShadow: 2,
-                  '&:hover': { boxShadow: 4 }
+                  "&:hover": { boxShadow: 4 },
                 }}
               >
                 Preview Navbar
               </Button>
             </Grid>
 
-            <Grid  >
-              <Button 
-                variant="outlined" 
+<Grid>
+              <Button
+                variant="contained"
+                color="secondary"
+                onClick={handleExportNavbar}
+                disabled={resettingNavbar || isSaving}
+                fullWidth
+                startIcon={<VisibilityIcon />}
+                sx={{
+                  py: 1.5,
+                  fontWeight: 600,
+                  boxShadow: 2,
+                  "&:hover": { boxShadow: 4 },
+                }}
+              >
+                Export Navbar
+              </Button>
+            </Grid>
+
+            <Grid>
+              <Button
+                variant="outlined"
                 color="error"
-                startIcon={<RestartAltIcon />} 
-                onClick={handleResetNavbar} 
+                startIcon={<RestartAltIcon />}
+                onClick={handleResetNavbar}
                 disabled={resettingNavbar || isSaving}
                 fullWidth
                 sx={{ py: 1.5, fontWeight: 600 }}
@@ -1457,69 +2161,73 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
       </Card>
 
       {/* Color Picker Dialog */}
-      <Dialog 
-        open={colorPickerOpen} 
-        onClose={() => { 
-          setNavbarColor(prevColor); 
-          setTempColor(prevColor); 
-          setColorPickerOpen(false); 
+      <Dialog
+        open={colorPickerOpen}
+        onClose={() => {
+          setNavbarColor(prevColor);
+          setTempColor(prevColor);
+          setColorPickerOpen(false);
         }}
-        PaperProps={{ 
-          sx: { 
-            borderRadius: 3, 
-            p: 2, 
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            p: 2,
             maxWidth: 400,
-            boxShadow: 5
-          } 
+            boxShadow: 5,
+          },
         }}
       >
-        <DialogTitle sx={{ textAlign: 'center', fontWeight: 600 }}>
+        <DialogTitle sx={{ textAlign: "center", fontWeight: 600 }}>
           Select Navbar Color
         </DialogTitle>
         <DialogContent>
-          <Box sx={{ 
-            display: 'flex', 
-            flexDirection: 'column', 
-            alignItems: 'center', 
-            mt: 1 
-          }}>
-            <Box sx={{ 
-              width: 100, 
-              height: 50, 
-              borderRadius: 2, 
-              border: '3px solid', 
-              borderColor: 'divider',
-              backgroundColor: tempColor, 
-              mb: 3, 
-              boxShadow: 2,
-              transition: 'all 0.2s ease'
-            }} />
-            <ChromePicker 
-              color={tempColor} 
-              onChange={(c) => { 
-                setTempColor(c.hex); 
-                setNavbarColor(c.hex); 
-              }} 
-              disableAlpha 
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              mt: 1,
+            }}
+          >
+            <Box
+              sx={{
+                width: 100,
+                height: 50,
+                borderRadius: 2,
+                border: "3px solid",
+                borderColor: "divider",
+                backgroundColor: tempColor,
+                mb: 3,
+                boxShadow: 2,
+                transition: "all 0.2s ease",
+              }}
+            />
+            <ChromePicker
+              color={tempColor}
+              onChange={(c) => {
+                setTempColor(c.hex);
+                setNavbarColor(c.hex);
+              }}
+              disableAlpha
             />
           </Box>
         </DialogContent>
-        <DialogActions sx={{ justifyContent: 'center', pb: 2, gap: 1 }}>
-          <Button 
-            onClick={() => { 
-              setNavbarColor(prevColor); 
-              setTempColor(prevColor); 
-              setColorPickerOpen(false); 
+        <DialogActions sx={{ justifyContent: "center", pb: 2, gap: 1 }}>
+          <Button
+            onClick={() => {
+              setNavbarColor(prevColor);
+              setTempColor(prevColor);
+              setColorPickerOpen(false);
             }}
             variant="outlined"
           >
             Cancel
           </Button>
-          <Button 
-            variant="contained" 
-            onClick={() => { 
-              setTempColor(navbarColor); 
-              setColorPickerOpen(false); 
+          <Button
+            variant="contained"
+            onClick={() => {
+              setTempColor(navbarColor);
+              setColorPickerOpen(false);
             }}
           >
             Apply
@@ -1528,19 +2236,19 @@ export default function NavBuilder({ setSelectedModule, setSavedNavbarConfig }: 
       </Dialog>
 
       {/* Snackbar */}
-      <Snackbar 
-        open={snackbarOpen} 
-        autoHideDuration={4000} 
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={4000}
         onClose={handleCloseSnackbar}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       >
-        <Alert 
-          onClose={handleCloseSnackbar} 
-          severity={snackbarSeverity} 
-          sx={{ 
-            width: '100%',
+        <Alert
+          onClose={handleCloseSnackbar}
+          severity={snackbarSeverity}
+          sx={{
+            width: "100%",
             boxShadow: 3,
-            fontWeight: 500
+            fontWeight: 500,
           }}
         >
           {snackbarMessage}
